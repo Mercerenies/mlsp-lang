@@ -1,7 +1,6 @@
 module Lang.Printer(Output(..), SExpr(..), Lispable(..),
                     showSexp, printSexp, output) where
 
-import Data.List(intercalate)
 import Data.Map(toList)
 import Lang.Parser
 import qualified Lang.Tokens as Tok
@@ -21,7 +20,7 @@ class Lispable a where
 showSexp :: Show a => SExpr a -> String
 showSexp (Symbol a) = a
 showSexp (Atom a) = show a
-showSexp (List xs) = "(" ++ intercalate " " (map showSexp xs) ++ ")"
+showSexp (List xs) = "(" ++ unwords (map showSexp xs) ++ ")"
 
 printSexp :: Show a => SExpr a -> IO ()
 printSexp = putStrLn . showSexp
@@ -61,7 +60,7 @@ instance Lispable Type where
     lispify (Named name args) = List $ [Symbol "named-type", Atom name] ++ map lispify args
     lispify (Func args result) = List $ [Symbol "func-type", List $ map lispify args,
                                               lispify result]
-
+{-
 instance Lispable Stmt where
     -- (stmt expr &optional cond)
     --   cond == (if expr) or (unless expr)
@@ -69,7 +68,7 @@ instance Lispable Stmt where
         where handleCond Nothing = []
               handleCond (Just (If, expr1)) = [Symbol "if", lispify expr1]
               handleCond (Just (Unless, expr1)) = [Symbol "unless", lispify expr1]
-
+-}
 instance Lispable Fields where
     -- (&rest fields) ; where each field is (name access)
     lispify (Fields mp) = List . map convert $ toList mp
@@ -88,8 +87,9 @@ instance Lispable Expr where
     -- (asn name expr)
     -- (subscript expr &rest args)
     -- (id name)
-    -- stmt
     -- opexpr
+    -- (if cond true &optional false)
+    -- (unless cond true &optional false)
     lispify (FunctionCall expr args) =
         List $ [Symbol "call", lispify expr] ++ map lispify args
     lispify (DotCall expr string args) =
@@ -110,10 +110,18 @@ instance Lispable Expr where
         List $ [Symbol "subscript", lispify expr] ++ map lispify args
     lispify (Ident str) =
         List [Symbol "id", Atom str]
-    lispify (Statement stmt) =
-        lispify stmt
+--    lispify (Statement stmt) =
+--        lispify stmt
     lispify (Oper expr) =
         lispify expr
+    lispify (IfStmt If cond true false) =
+        List $ [Symbol "if", lispify cond, lispify true] ++ case false of
+                                                              Just x -> [lispify x]
+                                                              Nothing -> []
+    lispify (IfStmt Unless cond true false) =
+        List $ [Symbol "unless", lispify cond, lispify true] ++ case false of
+                                                                  Just x -> [lispify x]
+                                                                  Nothing -> []
 
 instance Lispable Tok.Token where
     -- (literal type &rest contents)

@@ -1,11 +1,9 @@
-module Lang.Parser(Decl(..), Type(..), Stmt(..), Expr(..),
+module Lang.Parser(Decl(..), Type(..), Expr(..),
                    Fields(..), Access(..), IfOp(..), Call(..),
                    parseCode, file, toplevel) where
 
-import Lang.Lexer
 import Lang.Tokens
 import Lang.Operator
-import Data.Char(isSpace)
 import Data.List(intercalate)
 import Data.Either(partitionEithers)
 import qualified Data.Map as Map
@@ -17,24 +15,24 @@ import Control.Applicative hiding ((<|>), many)
 import Control.Monad
 
 data Decl = Module String [Decl] |
-            Function (Maybe Type) String [String] Stmt |
+            Function (Maybe Type) String [String] Expr |
             Type String Type [(String, Type)] Fields | -- Name, parent, variables, fields
             Concept String [String] [(String, Type)] | -- Name, args, variables
             Instance String [Type] Type [Decl] |
-            Variable (Maybe Type) String Stmt
+            Variable (Maybe Type) String Expr
             deriving (Show, Read, Eq)
 
 data Type = Tuple [Type] |
             Named String [Type] |
             Func [Type] Type
             deriving (Show, Read, Eq)
-
+{-
 data Stmt = Stmt Expr (Maybe (IfOp, Expr))
             deriving (Show, Read, Eq)
-
+-}
 data Expr = FunctionCall Expr [Expr] |
             DotCall Expr String [Expr] |
-            Block [Stmt] |
+            Block [Expr] |
             Literal Token |
             TupleExpr [Expr] |
             ListExpr [Expr] |
@@ -42,8 +40,9 @@ data Expr = FunctionCall Expr [Expr] |
             VarAsn String Expr |
             Subscript Expr [Expr] |
             Ident String |
-            Statement Stmt |
-            Oper (OpExpr Expr)
+--            Statement Stmt |
+            Oper (OpExpr Expr) |
+            IfStmt IfOp Expr Expr (Maybe Expr)
             deriving (Show, Read, Eq)
 
 newtype Fields = Fields (Map String Access)
@@ -63,7 +62,7 @@ instance Monoid Fields where
     (Fields m1) `mappend` (Fields m2) = Fields $ m1 `mappend` m2
 
 parseCode :: String -> [Lexeme] -> Either ParseError [Decl]
-parseCode src str = parse file src str
+parseCode = parse file
 
 file :: EParser [Decl]
 file = newlines *> endBy toplevel newlines1 <* eof
@@ -217,14 +216,16 @@ instanceDecl = do
   keyword "end"
   return $ Instance name args impl internals
 
-statement :: EParser Stmt
+statement :: EParser Expr
 statement = do
   expr <- toplevelExpr
   op <- optionMaybe $ do
               op' <- If <$ keyword "if" <|> Unless <$ keyword "unless"
               cond <- basicExpr
               return (op', cond)
-  return $ Stmt expr op
+  case op of
+    Nothing -> return expr
+    Just (kw, cond) -> return $ IfStmt kw cond expr Nothing
 
 -- Check tlCallExpr here before anything else so that f[1] parses as access, not
 -- a call on a list
@@ -241,7 +242,7 @@ toplevelExpr = try tlCallExpr <|> try funcSyntax <|> try callSyntax <|> basicExp
             notFollowedBy $ operator "+" <|> operator "-"
             firstArg <- basicExpr
             restArgs <- many (nlPrecedingComma *> basicExpr)
-            when (length restArgs == 0 && paren) $
+            when (null restArgs && paren) $
                  fail "top paren error; if you see this message, please report it"
             return $ FunctionCall (Ident name) (firstArg : restArgs)
           callSyntax = do
@@ -272,7 +273,29 @@ beginEndExpr = do
   return $ Block stmts
 
 ifExpr :: EParser Expr
-ifExpr = fail "Not implemented; if"
+ifExpr = do
+  kw <- If <$ keyword "if" <|> Unless <$ keyword "unless"
+  cond <- toplevelExpr
+  (true, false) <- oneLine <|> multiLine
+  return $ IfStmt kw cond true false
+    where oneLine = do
+            keyword "then"
+            newlines
+            true <- toplevelExpr
+            newlines
+            keyword "else"
+            newlines
+            false <- toplevelExpr
+            return (true, Just false)
+          multiLine = do
+                      newlines1
+                      true <- many (statement <* newlines1)
+                      false <- optionMaybe $ do
+                                 keyword "else"
+                                 newlines1
+                                 many (statement <* newlines1)
+                      keyword "end"
+                      return (Block $ true, Block <$> false)
 
 forExpr :: EParser Expr
 forExpr = fail "Not implemented; for"
@@ -285,19 +308,19 @@ condExpr = fail "Not implemented; cond"
 
 parenExpr :: EParser Expr
 parenExpr = operator "(" *> newlines *>
-            (Statement <$> statement)
+            statement
             <* newlines <* operator ")"
 
 literalExpr :: EParser Expr
 literalExpr = do
   lex <- satisfy $ \x -> case x of
                            Left y -> case y of
-                                       ReMatch _ -> True
-                                       ReSub _ _ -> True
-                                       Number _ _ _ -> True
-                                       Character _ -> True
-                                       String _ -> True
-                                       Symbol _ -> True
+                                       ReMatch {} -> True
+                                       ReSub {} -> True
+                                       Number {} -> True
+                                       Character {} -> True
+                                       String {} -> True
+                                       Symbol {} -> True
                                        _ -> False
                            Right _ -> False
   case lex of
