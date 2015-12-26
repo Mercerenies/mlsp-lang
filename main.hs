@@ -1,20 +1,20 @@
-{-# LANGUAGE FlexibleContexts #-}
 -- Based on MLSP5.txt
 
-import Lang.Tokens(Lexeme)
 import Lang.Lexer
 import Lang.Parser
 import Lang.Printer
-import Text.Parsec(parse)
-import Text.Parsec.Error(ParseError)
+import System.Environment
 
-testParser :: FilePath -> IO (Either ParseError [Decl])
-testParser str = readFile str >>= \code -> return $ do
-                   lex <- scan str code
-                   parse file str lex
-
-testLexer :: FilePath -> IO (Either ParseError [Lexeme])
-testLexer str = readFile str >>= \code -> return $ scan str code
-
--- main :: IO ()
--- main = getContents >>= print . parse tokens "(stdin)"
+-- TODO Command line args (System.Console.GetOpt)
+main :: IO ()
+main = getArgs >>= \args -> case args of
+                              [file] -> do
+                                        code <- readFile file
+                                        let result = do
+                                              lex <- scan file code
+                                              exp <- parseCode file lex
+                                              return $ output StdOut exp
+                                        case result of
+                                          Left expr -> print expr
+                                          Right act -> act
+                              _ -> putStrLn "Usage: ./main <filename>"

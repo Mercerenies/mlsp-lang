@@ -1,4 +1,5 @@
-module Lang.Printer where
+module Lang.Printer(Output(..), SExpr(..), Lispable(..),
+                    showSexp, printSexp, output) where
 
 import Data.List(intercalate)
 import Data.Map(toList)
@@ -6,7 +7,7 @@ import Lang.Parser
 import qualified Lang.Tokens as Tok
 import Lang.Operator
 
-data Output = StdOut | OutFile String
+data Output = StdOut | OutFile FilePath
               deriving (Show, Read, Eq)
 
 data SExpr a = Symbol String |
@@ -115,7 +116,55 @@ instance Lispable Expr where
         lispify expr
 
 instance Lispable Tok.Token where
-    lispify = undefined
+    -- (literal type &rest contents)
+    lispify tok = List $ [Symbol "literal", Symbol type_] ++ contents
+        where (type_, contents) =
+                  case tok of
+                    Tok.Keyword w -> ("keyword", [Atom w])
+                    Tok.ReMatch w -> ("rematch", [Atom w])
+                    Tok.ReSub w0 w1 -> ("resub", [Atom w0, Atom w1])
+                    Tok.Identifier w -> ("id", [Atom w])
+                    Tok.WIdentifier w -> ("wid", [Atom w])
+                    Tok.Number w0 w1 w2 -> ("number", [Symbol $ show w0, Symbol w1,
+                                                   Symbol $ show w2])
+                    Tok.Character ch -> ("character", [Atom [ch]])
+                    Tok.String toks -> ("string", map lispify toks)
+                    Tok.Symbol sym -> ("symbol", [Atom sym])
+                    Tok.Operator w -> ("operator", [Atom w])
+
+instance Lispable Tok.TextToken where
+    -- (text str)
+    -- (interp str)
+    lispify (Tok.Text str) = List [Symbol "text", Atom str]
+    lispify (Tok.Interp str) = List [Symbol "interp", Atom str]
 
 instance Lispable a => Lispable (OpExpr a) where
-    lispify = undefined
+    -- (operator &rest exprs)
+    lispify (OpExpr a) = lispify a
+    lispify (Pre op a) = List [lispify op, lispify a]
+    lispify (Post a op) = List [lispify op, lispify a]
+    lispify (Inf a1 op a2) = List [lispify op, lispify a1, lispify a2]
+
+instance Lispable Op where
+    lispify Plus = Symbol "+"
+    lispify Minus = Symbol "-"
+    lispify Times = Symbol "*"
+    lispify Div = Symbol "/"
+    lispify BooleanAnd = Symbol "&&"
+    lispify BooleanOr = Symbol "||"
+    lispify Apply = Symbol "=~"
+    lispify UniversalAnd = Symbol "and"
+    lispify UniversalOr = Symbol "or"
+    lispify Equal = Symbol "=="
+    lispify NEqual = Symbol "!="
+    lispify Less = Symbol "<"
+    lispify Greater = Symbol ">"
+    lispify LE = Symbol "<="
+    lispify GE = Symbol ">="
+
+instance Lispable a => Lispable [a] where
+    lispify = List . map lispify
+
+output :: Lispable a => Output -> a -> IO ()
+output StdOut = printSexp . lispify
+output (OutFile str) = writeFile str . showSexp . lispify

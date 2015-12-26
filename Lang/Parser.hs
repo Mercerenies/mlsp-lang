@@ -1,6 +1,6 @@
 module Lang.Parser(Decl(..), Type(..), Stmt(..), Expr(..),
                    Fields(..), Access(..), IfOp(..), Call(..),
-                   file, toplevel) where
+                   parseCode, file, toplevel) where
 
 import Lang.Lexer
 import Lang.Tokens
@@ -12,6 +12,7 @@ import qualified Data.Map as Map
 import Data.Map(Map)
 import Text.Parsec.Prim
 import Text.Parsec.Combinator
+import Text.Parsec.Error(ParseError)
 import Control.Applicative hiding ((<|>), many)
 import Control.Monad
 
@@ -60,6 +61,9 @@ data Call = Paren | Bracket | Dot String
 instance Monoid Fields where
     mempty = Fields Map.empty
     (Fields m1) `mappend` (Fields m2) = Fields $ m1 `mappend` m2
+
+parseCode :: String -> [Lexeme] -> Either ParseError [Decl]
+parseCode src str = parse file src str
 
 file :: EParser [Decl]
 file = newlines *> endBy toplevel newlines1 <* eof
