@@ -297,9 +297,6 @@ ifExpr = do
                       keyword "end"
                       return (Block $ true, Block <$> false)
 
-forExpr :: EParser Expr
-forExpr = fail "Not implemented; for"
-
 caseExpr :: EParser Expr
 caseExpr = fail "Not implemented; case"
 
