@@ -8,7 +8,7 @@ The compiler will, when finished, take Ruby-ish syntax and read it using the Has
 Current Progress
 ----------------
 
-The language is currently in its very early stages. The parser (written in Haskell using Parsec) is partially built and understands the syntax but does not output anything remotely readable as a result of it.
+The language is currently in its very early stages. The parser (written in Haskell using Parsec) is partially built and understands the basic syntax and outputs S-expressions, but no engine exists to understand the resulting expressions.
 
 Example Code
 ------------
