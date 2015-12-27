@@ -7,7 +7,13 @@
          :type string)))
 
 (defclass module (named)
+  ((decl :accessor module-decl
+         :initarg :decl
+         :initform nil
+         :type list)))
+
+(defclass func (named)
   ())
 
-(defclass function-decl (named)
+(defclass type (named)
   ())

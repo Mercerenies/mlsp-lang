@@ -3,3 +3,4 @@
 
 (load "util.lisp")
 (load "types.lisp")
+(load "reader.lisp")
