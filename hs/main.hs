@@ -13,7 +13,7 @@ main = getArgs >>= \args -> case args of
                                         let result = do
                                               lex <- scan file code
                                               exp <- parseCode file lex
-                                              return $ output StdOut exp
+                                              return $ mapM_ (output StdOut) exp
                                         case result of
                                           Left expr -> print expr
                                           Right act -> act
