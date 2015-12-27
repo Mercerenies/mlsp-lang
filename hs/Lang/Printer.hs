@@ -82,6 +82,7 @@ instance Lispable Fields where
 
 instance Lispable Expr where
     -- (call expr &rest args)
+    -- (dot lhs name &rest args
     -- (block &body rest)
     -- literal
     -- (tuple &rest args)
@@ -99,7 +100,7 @@ instance Lispable Expr where
     lispify (FunctionCall expr args) =
         List $ [Symbol "call", lispify expr] ++ map lispify args
     lispify (DotCall expr string args) =
-        List $ [Symbol "call", lispify $ Ident string, lispify expr] ++ map lispify args
+        List $ [Symbol "dot", lispify expr, Atom string] ++ map lispify args
     lispify (Block stmts) =
         List $ Symbol "block" : map lispify stmts
     lispify (Literal token) =
