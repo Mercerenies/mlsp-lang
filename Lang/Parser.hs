@@ -1,6 +1,12 @@
-module Lang.Parser(Decl(..), Type(..), Expr(..),
-                   Fields(..), Access(..), IfOp(..), Call(..),
+module Lang.Parser(Decl(..), Type(..), Expr(..), Conditional(..), Pattern(..),
+                   Fields(..), Access(..), IfOp(..), Call(..), Timing(..),
                    parseCode, file, toplevel) where
+
+{-
+ Test varAsn
+ Test case
+ Test if
+ -}
 
 import Lang.Tokens
 import Lang.Operator
@@ -17,7 +23,7 @@ import Control.Monad
 data Decl = Module String [Decl] |
             Function (Maybe Type) String [String] Expr |
             Type String Type [(String, Type)] Fields | -- Name, parent, variables, fields
-            Concept String [String] [(String, Type)] | -- Name, args, variables
+            Concept String [String] Timing [(String, Type)] | -- Name, args, variables
             Instance String [Type] Type [Decl] |
             Variable (Maybe Type) String Expr
             deriving (Show, Read, Eq)
@@ -26,10 +32,7 @@ data Type = Tuple [Type] |
             Named String [Type] |
             Func [Type] Type
             deriving (Show, Read, Eq)
-{-
-data Stmt = Stmt Expr (Maybe (IfOp, Expr))
-            deriving (Show, Read, Eq)
--}
+
 data Expr = FunctionCall Expr [Expr] |
             DotCall Expr String [Expr] |
             Block [Expr] |
@@ -37,13 +40,26 @@ data Expr = FunctionCall Expr [Expr] |
             TupleExpr [Expr] |
             ListExpr [Expr] |
             Declare Decl |
-            VarAsn String Expr |
+            VarAsn Pattern Expr |
             Subscript Expr [Expr] |
             Ident String |
---            Statement Stmt |
             Oper (OpExpr Expr) |
-            IfStmt IfOp Expr Expr (Maybe Expr)
+            IfStmt IfOp Conditional Expr (Maybe Expr) |
+            Cond [(Conditional, Expr)] (Maybe Expr)
             deriving (Show, Read, Eq)
+
+data Pattern = TuplePattern [Pattern] |
+               ListPattern [Pattern] |
+               SplatPattern [Pattern] String [Pattern] |
+               IdPattern String |
+               TypePattern String [Pattern] |
+               ExprPattern Expr |
+               UnderscorePattern
+               deriving (Show, Read, Eq)
+
+data Conditional = CondExpr Expr |
+                   BindExpr Pattern Expr
+                   deriving (Show, Read, Eq)
 
 newtype Fields = Fields (Map String Access)
     deriving (Show, Read, Eq)
@@ -55,6 +71,9 @@ data IfOp = If | Unless
             deriving (Show, Read, Eq, Ord)
 
 data Call = Paren | Bracket | Dot String
+            deriving (Show, Read, Eq, Ord)
+
+data Timing = Static | Dynamic
             deriving (Show, Read, Eq, Ord)
 
 instance Monoid Fields where
@@ -185,6 +204,7 @@ conceptDecl :: EParser Decl
 conceptDecl = do
   keyword "concept"
   newlines
+  binding <- option Static $ Dynamic <$ keyword "dynamic" <* newlines
   name <- identifier
   args <- option [] $ do
                 operator "["
@@ -196,7 +216,7 @@ conceptDecl = do
   newlines1
   internals <- endBy typeSpec newlines1
   keyword "end"
-  return $ Concept name args internals
+  return $ Concept name args binding internals
 
 instanceDecl :: EParser Decl
 instanceDecl = do
@@ -221,7 +241,7 @@ statement = do
   expr <- toplevelExpr
   op <- optionMaybe $ do
               op' <- If <$ keyword "if" <|> Unless <$ keyword "unless"
-              cond <- basicExpr
+              cond <- condit
               return (op', cond)
   case op of
     Nothing -> return expr
@@ -260,9 +280,9 @@ basicExpr = Oper <$> operatorExpr basicTerm <?> "basic expression"
 
 basicTerm :: EParser Expr
 basicTerm = beginEndExpr <|> ifExpr <|> forExpr <|> caseExpr <|> condExpr <|>
-            parenExpr <|> literalExpr <|> tupleExpr <|> listExpr <|>
+            parenExpr <|> try varAsn <|> literalExpr <|> tupleExpr <|> listExpr <|>
             try (Declare <$> varDecl) <|> try (Declare <$> functionDecl) <|>
-            try varAsn <|> try callExpr
+            try callExpr
 
 beginEndExpr :: EParser Expr
 beginEndExpr = do
@@ -275,7 +295,8 @@ beginEndExpr = do
 ifExpr :: EParser Expr
 ifExpr = do
   kw <- If <$ keyword "if" <|> Unless <$ keyword "unless"
-  cond <- toplevelExpr
+  newlines
+  cond <- condit
   (true, false) <- oneLine <|> multiLine
   return $ IfStmt kw cond true false
     where oneLine = do
@@ -297,11 +318,34 @@ ifExpr = do
                       keyword "end"
                       return (Block $ true, Block <$> false)
 
+forExpr :: EParser Expr
+forExpr = fail "Not implemented; for"
+
 caseExpr :: EParser Expr
 caseExpr = fail "Not implemented; case"
 
 condExpr :: EParser Expr
-condExpr = fail "Not implemented; cond"
+condExpr = do
+  keyword "cond"
+  newlines
+  clauses <- many (clause <* newlines1)
+  else_ <- optionMaybe $ do
+             keyword "else"
+             newlines
+             Block <$> many (toplevelExpr <* newlines1)
+  keyword "end"
+  return $ Cond clauses else_
+    where clause = do
+             keyword "when"
+             newlines
+             cond <- condit
+             body <- singleLine <|> multiLine
+             return (cond, body)
+          singleLine = do
+                     keyword "then"
+                     newlines
+                     toplevelExpr
+          multiLine = Block <$> many (try $ newlines1 *> toplevelExpr)
 
 parenExpr :: EParser Expr
 parenExpr = operator "(" *> newlines *>
@@ -361,26 +405,39 @@ varDecl = do
 
 varAsn :: EParser Expr
 varAsn = do
-  name <- callExpr
+  name <- Left <$> try pattern <|> Right <$> callExpr
   op <- operator "=" <|> operator "+=" <|> operator "-=" <|>
         operator "*=" <|> operator "/=" <|> operator "&&=" <|>
         operator "||="
   newlines
   expr <- toplevelExpr
-  let (name', expr') =
-          case op of
-            Left (Operator "=") -> (name, expr)
-            Left (Operator "+=") -> (name, Oper (Inf (OpExpr name) Plus (OpExpr expr)))
-            Left (Operator "-=") -> (name, Oper (Inf (OpExpr name) Minus (OpExpr expr)))
-            Left (Operator "*=") -> (name, Oper (Inf (OpExpr name) Times (OpExpr expr)))
-            Left (Operator "/=") -> (name, Oper (Inf (OpExpr name) Div (OpExpr expr)))
-            Left (Operator "&&=") -> (name, Oper (Inf (OpExpr name)
-                                                      UniversalAnd (OpExpr expr)))
-            Left (Operator "||=") -> (name, Oper (Inf (OpExpr name)
-                                                      UniversalOr (OpExpr expr)))
+  (name', expr') <-
+      case name of
+        Right name ->
+            case op of
+              Left (Operator "=") ->
+                  return (Right name, expr)
+              Left (Operator "+=") ->
+                  return (Right name, Oper (Inf (OpExpr name) Plus (OpExpr expr)))
+              Left (Operator "-=") ->
+                  return (Right name, Oper (Inf (OpExpr name) Minus (OpExpr expr)))
+              Left (Operator "*=") ->
+                  return (Right name, Oper (Inf (OpExpr name) Times (OpExpr expr)))
+              Left (Operator "/=") ->
+                  return (Right name, Oper (Inf (OpExpr name) Div (OpExpr expr)))
+              Left (Operator "&&=") ->
+                  return (Right name, Oper (Inf (OpExpr name) UniversalAnd (OpExpr expr)))
+              Left (Operator "||=") ->
+                  return (Right name, Oper (Inf (OpExpr name) UniversalOr (OpExpr expr)))
+              _ -> fail "variable assignment operator failed; report this message"
+        Left _ ->
+            case op of
+              Left (Operator "=") -> return (name, expr)
+              _ -> unexpected "compound assignment on pattern"
   case name' of
-    Ident x -> return $ VarAsn x expr'
-    DotCall lhs name' rhs -> return $ DotCall lhs (name' ++ "_asn") (expr' : rhs)
+    Left pat -> return $ VarAsn pat expr'
+    Right (Ident x) -> return $ VarAsn (IdPattern x) expr'
+    Right (DotCall lhs name' rhs) -> return $ DotCall lhs (name' ++ "_asn") (expr' : rhs)
     _ -> fail "variable assignment syntax failed; report this message"
 
 callLHS :: EParser Expr
@@ -423,7 +480,62 @@ callExpr = do
 
 -- A rather bizarre workaround for non-ambiguity's sake. See toplevelExpr for details.
 tlCallExpr :: EParser Expr
-tlCallExpr = lookAhead (identifier >> operator "[") >> callExpr
+tlCallExpr = do
+  lookAhead (identifier >> operator "[")
+  callExpr
+
+condit :: EParser Conditional
+condit = try bindExpr <|> CondExpr <$> toplevelExpr
+    where bindExpr = do
+            lhs <- pattern
+            operator "<-"
+            newlines
+            expr <- toplevelExpr
+            return $ BindExpr lhs expr
+
+pattern :: EParser Pattern
+pattern = tuplePattern <|> listPattern <|> exprPattern <|>
+          UnderscorePattern <$ matchToken (Identifier "_") <|>
+          try typePattern <|> idPattern <?> "pattern"
+
+tuplePattern :: EParser Pattern
+tuplePattern = operator "{" *> newlines *>
+               (TuplePattern <$> sepBy pattern nlComma)
+               <* newlines <* operator "}"
+
+listPattern :: EParser Pattern
+listPattern = do
+  operator "[" >> newlines
+  args <- sepBy pattern nlComma
+  result <- option (ListPattern args) $ do
+                operator "..."
+                rest <- many $ nlComma *>  pattern
+                case args of
+                  [] -> unexpected "ellipsis"
+                  _ -> case last args of
+                         IdPattern pat -> return $ SplatPattern (init args) pat rest
+                         _ -> unexpected "pattern" <?> "identifier"
+  newlines >> operator "]"
+  return result
+
+exprPattern :: EParser Pattern
+exprPattern = ExprPattern <$> (operator "^" *> newlines *> toplevelExpr)
+
+typePattern :: EParser Pattern
+typePattern = do
+  operator "&"
+  newlines
+  name <- identifier
+  newlines
+  operator "["
+  newlines
+  args <- sepBy pattern nlComma
+  newlines
+  operator "]"
+  return $ TypePattern name args
+
+idPattern :: EParser Pattern
+idPattern = IdPattern <$> identifier
 
 nlComma :: EParser ()
 nlComma = void $ newlines *> operator "," <* newlines

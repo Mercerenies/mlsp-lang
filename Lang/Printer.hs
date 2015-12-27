@@ -32,7 +32,7 @@ instance Lispable Decl where
     -- (module name &body rest)
     -- (function name (&rest args) (&optional type) body)
     -- (type name parent (&rest vars) fields) ; where vars is a list of (name type)
-    -- (concept name (&rest args) &rest vars) ; where vars is a list of (name type)
+    -- (concept name (&rest args) timing &rest vars) ; where vars is a list of (name type)
     -- (instance name (&rest args) impl &rest vars)
     -- (var name (&optional type) body)
     lispify (Module name internals) =
@@ -43,8 +43,12 @@ instance Lispable Decl where
     lispify (Type name parent vars fields) =
         List $ [Symbol "type", Atom name, lispify parent, List $ map lispify' vars,
                 lispify fields]
-    lispify (Concept name args vars) =
-        List $ [Symbol "concept", Atom name, List $ map Atom args] ++ map lispify' vars
+    lispify (Concept name args bind vars) =
+        List $ [Symbol "concept", Atom name, List $ map Atom args, timing] ++
+             map lispify' vars
+        where timing = case bind of
+                         Static -> Symbol "static"
+                         Dynamic -> Symbol "dynamic"
     lispify (Instance name args impl vars) =
         List $ [Symbol "instance", Atom name, List $ map lispify args, lispify impl]
                  ++ map lispify vars
@@ -84,12 +88,13 @@ instance Lispable Expr where
     -- (tuple &rest args)
     -- (list &rest args)
     -- (declare decl)
-    -- (asn name expr)
+    -- (asn pattern expr)
     -- (subscript expr &rest args)
     -- (id name)
     -- opexpr
     -- (if cond true &optional false)
     -- (unless cond true &optional false)
+    -- (cond (&rest rest) &optional else) ; where rest is (expr0 expr1x)
     lispify (FunctionCall expr args) =
         List $ [Symbol "call", lispify expr] ++ map lispify args
     lispify (DotCall expr string args) =
@@ -105,7 +110,7 @@ instance Lispable Expr where
     lispify (Declare decl) =
         List $ [Symbol "declare", lispify decl]
     lispify (VarAsn name expr) =
-        List $ [Symbol "asn", Atom name, lispify expr]
+        List $ [Symbol "asn", lispify name, lispify expr]
     lispify (Subscript expr args) =
         List $ [Symbol "subscript", lispify expr] ++ map lispify args
     lispify (Ident str) =
@@ -122,6 +127,12 @@ instance Lispable Expr where
         List $ [Symbol "unless", lispify cond, lispify true] ++ case false of
                                                                   Just x -> [lispify x]
                                                                   Nothing -> []
+    lispify (Cond rest else_) =
+        List $ [Symbol "cond", clauses] ++ elseClause
+            where clauses = List $ map (\(e0, e1) -> List [lispify e0, lispify e1]) rest
+                  elseClause = case else_ of
+                                 Just x -> [lispify x]
+                                 Nothing -> []
 
 instance Lispable Tok.Token where
     -- (literal type &rest contents)
@@ -133,7 +144,7 @@ instance Lispable Tok.Token where
                     Tok.ReSub w0 w1 -> ("resub", [Atom w0, Atom w1])
                     Tok.Identifier w -> ("id", [Atom w])
                     Tok.WIdentifier w -> ("wid", [Atom w])
-                    Tok.Number w0 w1 w2 -> ("number", [Symbol $ show w0, Symbol w1,
+                    Tok.Number w0 w1 w2 -> ("number", [Symbol $ show w0, Atom w1,
                                                    Symbol $ show w2])
                     Tok.Character ch -> ("character", [Atom [ch]])
                     Tok.String toks -> ("string", map lispify toks)
@@ -169,6 +180,30 @@ instance Lispable Op where
     lispify Greater = Symbol ">"
     lispify LE = Symbol "<="
     lispify GE = Symbol ">="
+
+instance Lispable Conditional where
+    -- expr
+    -- (bind lhs rhs)
+    lispify (CondExpr a) = lispify a
+    lispify (BindExpr lhs rhs) = List [Symbol "bind", lispify lhs, lispify rhs]
+
+instance Lispable Pattern where
+    -- (pattern-tuple &rest args)
+    -- (pattern-list &rest args)
+    -- (pattern-splat (&rest args0) splat (&rest args1))
+    -- (pattern-id name)
+    -- (pattern-type name &rest args)
+    -- (pattern-expr expr)
+    -- (pattern-underscore)
+    lispify (TuplePattern args) = List $ Symbol "pattern-tuple" : map lispify args
+    lispify (ListPattern args) = List $ Symbol "pattern-list" : map lispify args
+    lispify (SplatPattern a0 mid a1) = List $ [Symbol "pattern-splat"] ++
+                                       map lispify a0 ++ [Atom mid] ++ map lispify a1
+    lispify (IdPattern name) = List $ [Symbol "pattern-id", Atom name]
+    lispify (TypePattern name args) = List $ [Symbol "pattern-type", Atom name] ++
+                                      map lispify args
+    lispify (ExprPattern expr) = List $ [Symbol "pattern-expr", lispify expr]
+    lispify UnderscorePattern = List $ [Symbol "pattern-underscore"]
 
 instance Lispable a => Lispable [a] where
     lispify = List . map lispify

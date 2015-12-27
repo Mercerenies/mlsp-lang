@@ -74,12 +74,15 @@ operator op = matchToken (Operator op) <?> "operator '" ++ op ++ "'"
 keywords :: [String]
 keywords = ["module", "type", "begin", "end", "concept", "instance",
             "fields", "if", "then", "else", "unless", "in", "case",
-            "when", "cond", "for", "var"]
+            "when", "cond", "for", "var", "dynamic"]
 
 operators :: [String]
-operators = ["+=", "-=", "*=", "/=", "==", "<=", ">=", "<", ">", "&&=", "||=",
-             "=~", "::", "*", "/", "[", "]", "{", "}", ",", "=", ".",
-             "->", "<-", "+", "-", "(", ")", "&&", "||", "|", "and", "or", "is"]
+operators = ["+=", "-=", "*=", "/=", "==", "<=", ">=", "&&=", "||=", "&&", "||",
+             "...", "->", "<-", "=~", "::", "<", ">", "*", "/", "[", "]", "&",
+             "{", "}", ",", "=", ".", "+", "-", "(", ")", "|", "^",
+             "and", "or", "is"]
 
 reDelimiters :: [Char]
 reDelimiters = "/~!@#$%^&*|-=+"
+
+-- For / case statements
