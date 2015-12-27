@@ -1,12 +1,6 @@
 module Lang.Parser(Decl(..), Type(..), Expr(..), Conditional(..), Pattern(..),
-                   Fields(..), Access(..), IfOp(..), Call(..), Timing(..),
+                   Fields(..), Access(..), IfOp(..), ForOp(..), Call(..), Timing(..),
                    parseCode, file, toplevel) where
-
-{-
- Test varAsn
- Test case
- Test if
- -}
 
 import Lang.Tokens
 import Lang.Operator
@@ -17,7 +11,6 @@ import Data.Map(Map)
 import Text.Parsec.Prim
 import Text.Parsec.Combinator
 import Text.Parsec.Error(ParseError)
-import Control.Applicative hiding ((<|>), many)
 import Control.Monad
 
 data Decl = Module String [Decl] |
@@ -45,6 +38,8 @@ data Expr = FunctionCall Expr [Expr] |
             Ident String |
             Oper (OpExpr Expr) |
             IfStmt IfOp Conditional Expr (Maybe Expr) |
+            ForStmt ForOp Pattern Expr Expr |
+            Case Expr [(Pattern, Maybe Expr, Expr)] |
             Cond [(Conditional, Expr)] (Maybe Expr)
             deriving (Show, Read, Eq)
 
@@ -69,6 +64,9 @@ data Access = Read | ReadWrite
 
 data IfOp = If | Unless
             deriving (Show, Read, Eq, Ord)
+
+data ForOp = ForEq | ForBind
+             deriving (Show, Read, Eq, Ord)
 
 data Call = Paren | Bracket | Dot String
             deriving (Show, Read, Eq, Ord)
@@ -147,8 +145,7 @@ typeStatement = Right <$> fields_ <|> Left <$> type_
 
 fieldsExpr :: EParser Fields
 fieldsExpr = (Fields . Map.fromList) <$> endBy identifier' newlines1
-    where isIdentifier x = case x of { Left (Identifier _) -> True ; _ -> False }
-          identifier' = do
+    where identifier' = do
             result <- identifier
             opt <- accessSuffix
             return (result, opt)
@@ -320,10 +317,50 @@ ifExpr = do
 -- ///// For and Case
 
 forExpr :: EParser Expr
-forExpr = fail "Not implemented; for"
+forExpr = do
+  keyword "for"
+  newlines
+  ptn <- pattern
+  newlines
+  op <- ForEq <$ operator "=" <|> ForBind <$ operator "<-"
+  newlines
+  expr <- toplevelExpr
+  inner <- oneLine <|> multiLine
+  return $ ForStmt op ptn expr inner
+      where oneLine = do
+              keyword "then"
+              newlines
+              toplevelExpr
+            multiLine = do
+                        newlines1
+                        expr <- many (statement <* newlines1)
+                        keyword "end"
+                        return $ Block expr
 
 caseExpr :: EParser Expr
-caseExpr = fail "Not implemented; case"
+caseExpr = do
+  keyword "case"
+  newlines
+  expr <- toplevelExpr
+  newlines1
+  clauses <- many (clause <* newlines1)
+  keyword "end"
+  return $ Case expr clauses
+    where clause = do
+             keyword "when"
+             newlines
+             cond <- pattern
+             guardClause <- optionMaybe $ do
+                              operator "|" <?> "guard clause"
+                              newlines
+                              basicExpr
+             body <- singleLine <|> multiLine
+             return (cond, guardClause, body)
+          singleLine = do
+                     keyword "then"
+                     newlines
+                     toplevelExpr
+          multiLine = Block <$> many (try $ newlines1 *> statement)
 
 condExpr :: EParser Expr
 condExpr = do
@@ -333,7 +370,7 @@ condExpr = do
   else_ <- optionMaybe $ do
              keyword "else"
              newlines
-             Block <$> many (toplevelExpr <* newlines1)
+             Block <$> many (statement <* newlines1)
   keyword "end"
   return $ Cond clauses else_
     where clause = do
@@ -346,7 +383,7 @@ condExpr = do
                      keyword "then"
                      newlines
                      toplevelExpr
-          multiLine = Block <$> many (try $ newlines1 *> toplevelExpr)
+          multiLine = Block <$> many (try $ newlines1 *> statement)
 
 parenExpr :: EParser Expr
 parenExpr = operator "(" *> newlines *>

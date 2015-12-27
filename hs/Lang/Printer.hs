@@ -93,6 +93,8 @@ instance Lispable Expr where
     -- opexpr
     -- (if cond true &optional false)
     -- (unless cond true &optional false)
+    -- (for type expr body) ; where type is = or <-
+    -- (case expr &rest clauses) ; where clauses are (pattern (&optional guard) body)
     -- (cond (&rest rest) &optional else) ; where rest is (expr0 expr1x)
     lispify (FunctionCall expr args) =
         List $ [Symbol "call", lispify expr] ++ map lispify args
@@ -114,18 +116,20 @@ instance Lispable Expr where
         List $ [Symbol "subscript", lispify expr] ++ map lispify args
     lispify (Ident str) =
         List [Symbol "id", Atom str]
---    lispify (Statement stmt) =
---        lispify stmt
     lispify (Oper expr) =
         lispify expr
-    lispify (IfStmt If cond true false) =
-        List $ [Symbol "if", lispify cond, lispify true] ++ case false of
+    lispify (IfStmt if_ cond true false) =
+        List $ [lispify if_, lispify cond, lispify true] ++ case false of
                                                               Just x -> [lispify x]
                                                               Nothing -> []
-    lispify (IfStmt Unless cond true false) =
-        List $ [Symbol "unless", lispify cond, lispify true] ++ case false of
-                                                                  Just x -> [lispify x]
-                                                                  Nothing -> []
+    lispify (ForStmt for ptn expr body) =
+        List $ [Symbol "for", lispify for, lispify ptn, lispify expr, lispify body]
+    lispify (Case expr clauses) =
+        List $ [Symbol "case", lispify expr] ++ map handleClause clauses
+            where handleClause (ptn, Nothing, body) =
+                      List [lispify ptn, List [], lispify body]
+                  handleClause (ptn, Just x, body) =
+                      List [lispify ptn, List [lispify x], lispify body]
     lispify (Cond rest else_) =
         List $ [Symbol "cond", clauses] ++ elseClause
             where clauses = List $ map (\(e0, e1) -> List [lispify e0, lispify e1]) rest
@@ -161,6 +165,14 @@ instance Lispable a => Lispable (OpExpr a) where
     lispify (Pre op a) = List [lispify op, lispify a]
     lispify (Post a op) = List [lispify op, lispify a]
     lispify (Inf a1 op a2) = List [lispify op, lispify a1, lispify a2]
+
+instance Lispable IfOp where
+    lispify If = Symbol "if"
+    lispify Unless = Symbol "unless"
+
+instance Lispable ForOp where
+    lispify ForEq = Symbol "="
+    lispify ForBind = Symbol "<-"
 
 instance Lispable Access where
     lispify Read = Symbol "read"
