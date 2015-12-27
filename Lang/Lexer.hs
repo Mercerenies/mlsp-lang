@@ -49,8 +49,7 @@ operator = Operator <$> choice (map (try . string) operators)
 identifier :: Parsec String () Token
 identifier = do
   str <- (:) <$> (char '$' <|> alphaUnder) <*> many alNumUnder
-  excl <- option False $ True <$ char '!'
-  return $ (if excl then WIdentifier else Identifier) str
+  return $ Identifier str
 
 integerNumber :: Parsec String () Integer
 integerNumber = do

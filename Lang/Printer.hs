@@ -57,13 +57,15 @@ instance Lispable Decl where
                 lispify val]
 
 instance Lispable Type where
-    -- (tuple-type &rest types)
-    -- (named-type name &rest args)
+    -- (tuple-type acc &rest types)
+    -- (named-type name acc &rest args)
     -- (func-type (&rest args) result)
-    lispify (Tuple xs) = List $ Symbol "tuple-type" : map lispify xs
-    lispify (Named name args) = List $ [Symbol "named-type", Atom name] ++ map lispify args
-    lispify (Func args result) = List $ [Symbol "func-type", List $ map lispify args,
-                                              lispify result]
+    lispify (Tuple xs acc) =
+        List $ [Symbol "tuple-type", lispify acc] ++ map lispify xs
+    lispify (Named name args acc) =
+        List $ [Symbol "named-type", Atom name, lispify acc] ++ map lispify args
+    lispify (Func args result) =
+        List $ [Symbol "func-type", List $ map lispify args, lispify result]
 {-
 instance Lispable Stmt where
     -- (stmt expr &optional cond)
@@ -76,10 +78,7 @@ instance Lispable Stmt where
 instance Lispable Fields where
     -- (&rest fields) ; where each field is (name access)
     lispify (Fields mp) = List . map convert $ toList mp
-        where convert (str, acc) = List [Atom str,
-                                         Symbol $ case acc of
-                                                    Read -> "read"
-                                                    ReadWrite -> "read-write"]
+        where convert (str, acc) = List [Atom str, lispify acc]
 
 instance Lispable Expr where
     -- (call expr &rest args)
@@ -143,7 +142,6 @@ instance Lispable Tok.Token where
                     Tok.ReMatch w -> ("rematch", [Atom w])
                     Tok.ReSub w0 w1 -> ("resub", [Atom w0, Atom w1])
                     Tok.Identifier w -> ("id", [Atom w])
-                    Tok.WIdentifier w -> ("wid", [Atom w])
                     Tok.Number w0 w1 w2 -> ("number", [Symbol $ show w0, Atom w1,
                                                    Symbol $ show w2])
                     Tok.Character ch -> ("character", [Atom [ch]])
@@ -163,6 +161,10 @@ instance Lispable a => Lispable (OpExpr a) where
     lispify (Pre op a) = List [lispify op, lispify a]
     lispify (Post a op) = List [lispify op, lispify a]
     lispify (Inf a1 op a2) = List [lispify op, lispify a1, lispify a2]
+
+instance Lispable Access where
+    lispify Read = Symbol "read"
+    lispify ReadWrite = Symbol "read-write"
 
 instance Lispable Op where
     lispify Plus = Symbol "+"

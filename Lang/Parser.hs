@@ -28,8 +28,8 @@ data Decl = Module String [Decl] |
             Variable (Maybe Type) String Expr
             deriving (Show, Read, Eq)
 
-data Type = Tuple [Type] |
-            Named String [Type] |
+data Type = Tuple [Type] Access |
+            Named String [Type] Access |
             Func [Type] Type
             deriving (Show, Read, Eq)
 
@@ -124,7 +124,7 @@ typeDecl = do
   keyword "type"
   newlines
   name <- identifier
-  parent <- option (Named "T" []) $ operator "(" *> typeExpr <* operator ")"
+  parent <- option (Named "T" [] Read) $ operator "(" *> typeExpr <* operator ")"
   newlines1
   (types, fields) <- typeInterior
   keyword "end"
@@ -148,13 +148,10 @@ typeStatement = Right <$> fields_ <|> Left <$> type_
 fieldsExpr :: EParser Fields
 fieldsExpr = (Fields . Map.fromList) <$> endBy identifier' newlines1
     where isIdentifier x = case x of { Left (Identifier _) -> True ; _ -> False }
-          isWIdentifier x = case x of { Left (WIdentifier _) -> True ; _ -> False }
           identifier' = do
-            result <- satisfy (liftA2 (||) isIdentifier isWIdentifier)
-            case result of
-              Left (Identifier x) -> return (x, Read)
-              Left (WIdentifier x) -> return (x, ReadWrite)
-              _ -> unexpected "access modifier"
+            result <- identifier
+            opt <- accessSuffix
+            return (result, opt)
 
 typeSpec :: EParser (String, Type)
 typeSpec = do
@@ -174,7 +171,8 @@ tupleTypeExpr = do
   contents <- sepBy typeExpr nlComma
   newlines
   operator "}"
-  return $ Tuple contents
+  access <- accessSuffix
+  return $ Tuple contents access
 
 namedTypeExpr :: EParser Type
 namedTypeExpr = do
@@ -186,7 +184,8 @@ namedTypeExpr = do
                   newlines
                   operator "]"
                   return args'
-  return $ Named name args
+  access <- accessSuffix
+  return $ Named name args access
 
 funcTypeExpr :: EParser Type
 funcTypeExpr = do
@@ -317,6 +316,8 @@ ifExpr = do
                                  many (statement <* newlines1)
                       keyword "end"
                       return (Block $ true, Block <$> false)
+
+-- ///// For and Case
 
 forExpr :: EParser Expr
 forExpr = fail "Not implemented; for"
@@ -536,6 +537,9 @@ typePattern = do
 
 idPattern :: EParser Pattern
 idPattern = IdPattern <$> identifier
+
+accessSuffix :: EParser Access
+accessSuffix = option Read $ ReadWrite <$ operator "!"
 
 nlComma :: EParser ()
 nlComma = void $ newlines *> operator "," <* newlines

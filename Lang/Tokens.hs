@@ -17,7 +17,6 @@ data Token =
     ReMatch String |
     ReSub String String |
     Identifier String |
-    WIdentifier String | -- Identifier with ! suffix
     Number Integer String Integer | -- Integer part, decimal part, exponent part
     Character Char |
     String [TextToken] |
@@ -78,11 +77,9 @@ keywords = ["module", "type", "begin", "end", "concept", "instance",
 
 operators :: [String]
 operators = ["+=", "-=", "*=", "/=", "==", "<=", ">=", "&&=", "||=", "&&", "||",
-             "...", "->", "<-", "=~", "::", "<", ">", "*", "/", "[", "]", "&",
+             "...", "->", "<-", "=~", "::", "<", ">", "*", "/", "[", "]", "&", "!",
              "{", "}", ",", "=", ".", "+", "-", "(", ")", "|", "^",
              "and", "or", "is"]
 
 reDelimiters :: [Char]
 reDelimiters = "/~!@#$%^&*|-=+"
-
--- For / case statements
