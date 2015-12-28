@@ -1,4 +1,5 @@
-module Lang.Parser(Decl(..), Type(..), Expr(..), Conditional(..), Pattern(..),
+module Lang.Parser(FileData(..), Decl(..), Type(..), Expr(..),
+                   Conditional(..), Pattern(..),
                    Fields(..), Access(..), IfOp(..), ForOp(..), Call(..), Timing(..),
                    parseCode, file, toplevel) where
 
@@ -13,7 +14,12 @@ import Text.Parsec.Combinator
 import Text.Parsec.Error(ParseError)
 import Control.Monad
 
-data Decl = Module String [Decl] |
+data FileData = FileData String [Decl] -- Package, declarations
+                deriving (Show, Read, Eq)
+
+data Decl = Import String [String] | -- Name, hiding
+            Include String [String] | -- Name, hiding
+            Module String [Decl] |
             Function (Maybe Type) String [String] Expr |
             Type String Type [(String, Type)] Fields | -- Name, parent, variables, fields
             Concept String [String] Timing [(String, Type)] | -- Name, args, variables
@@ -78,15 +84,35 @@ instance Monoid Fields where
     mempty = Fields Map.empty
     (Fields m1) `mappend` (Fields m2) = Fields $ m1 `mappend` m2
 
-parseCode :: String -> [Lexeme] -> Either ParseError [Decl]
+parseCode :: String -> [Lexeme] -> Either ParseError FileData
 parseCode = parse file
 
-file :: EParser [Decl]
-file = newlines *> endBy toplevel newlines1 <* eof
+file :: EParser FileData
+file = do
+  newlines
+  pkg <- option "Main" $ keyword "package" *> dottedIdentifier <* newlines1
+  decl <- endBy toplevel newlines1
+  eof
+  return $ FileData pkg decl
 
 toplevel :: EParser Decl
 toplevel = moduleDecl <|> functionDecl <|> typeDecl <|>
-           conceptDecl <|> instanceDecl
+           conceptDecl <|> instanceDecl <|> importInclude
+
+importInclude :: EParser Decl
+importInclude = do
+  constr <- Import <$ keyword "import" <|> Include <$ keyword "include"
+  name <- dottedIdentifier
+  hiding <- option [] $ do
+                  keyword "hiding"
+                  newlines
+                  operator "("
+                  newlines
+                  inside <- sepBy identifier nlComma
+                  newlines
+                  operator ")"
+                  return inside
+  return $ constr name hiding
 
 moduleDecl :: EParser Decl
 moduleDecl = do
@@ -173,7 +199,7 @@ tupleTypeExpr = do
 
 namedTypeExpr :: EParser Type
 namedTypeExpr = do
-  name <- identifier
+  name <- dottedIdentifier
   args <- option [] $ do
                   operator "["
                   newlines
@@ -580,3 +606,9 @@ accessSuffix = option Read $ ReadWrite <$ operator "!"
 
 nlComma :: EParser ()
 nlComma = void $ newlines *> operator "," <* newlines
+
+dottedIdentifier :: EParser String
+dottedIdentifier = do
+  first <- identifier
+  rest <- many $ operator "." *> identifier
+  return $ intercalate "." (first : rest)

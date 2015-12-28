@@ -71,15 +71,15 @@ operator :: Stream s m Lexeme => String -> ParsecT s u m Lexeme
 operator op = matchToken (Operator op) <?> "operator '" ++ op ++ "'"
 
 keywords :: [String]
-keywords = ["module", "type", "begin", "end", "concept", "instance",
-            "fields", "if", "then", "else", "unless", "in", "case",
-            "when", "cond", "for", "var", "dynamic"]
+keywords = ["package", "import", "include", "hiding", "module", "type", "begin", "end",
+            "concept", "instance", "fields", "if", "then", "else", "unless",
+            "in", "case", "when", "cond", "for", "var", "dynamic"]
 
 operators :: [String]
 operators = ["+=", "-=", "*=", "/=", "==", "<=", ">=", "&&=", "||=", "&&", "||",
              "...", "->", "<-", "=~", "::", "<", ">", "*", "/", "[", "]", "&", "!",
              "{", "}", ",", "=", ".", "+", "-", "(", ")", "|", "^",
-             "and", "or", "is"]
+             "and", "or", "is", "has"]
 
 reDelimiters :: [Char]
 reDelimiters = "/~!@#$%^&*|-=+"

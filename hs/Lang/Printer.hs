@@ -28,13 +28,24 @@ printSexp = putStrLn . showSexp
 lispify' :: Lispable x => (String, x) -> SExpr String
 lispify' (str, tpe) = List [Atom str, lispify tpe]
 
+instance Lispable FileData where
+    -- ((package name) &rest decl)
+    lispify (FileData name decl) =
+        List $ List [Symbol "package", Atom name] : map lispify decl
+
 instance Lispable Decl where
+    -- (include name (&rest hiding))
+    -- (import name (&rest hiding))
     -- (module name &body rest)
     -- (function name (&rest args) (&optional type) body)
     -- (type name parent (&rest vars) fields) ; where vars is a list of (name type)
     -- (concept name (&rest args) timing &rest vars) ; where vars is a list of (name type)
     -- (instance name (&rest args) impl &rest vars)
     -- (var name (&optional type) body)
+    lispify (Include name hiding) =
+        List $ [Symbol "include", Atom name, List $ map Atom hiding]
+    lispify (Import name hiding) =
+        List $ [Symbol "import", Atom name, List $ map Atom hiding]
     lispify (Module name internals) =
         List $ [Symbol "module", Atom name] ++ map lispify internals
     lispify (Function type_ name args impl) =
