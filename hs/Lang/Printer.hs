@@ -5,6 +5,7 @@ import Data.Map(toList)
 import Lang.Parser
 import qualified Lang.Tokens as Tok
 import Lang.Operator
+import Text.Parsec.Pos(SourcePos, sourceLine, sourceColumn)
 
 data Output = StdOut | OutFile FilePath
               deriving (Show, Read, Eq)
@@ -34,116 +35,114 @@ instance Lispable FileData where
         List $ List [Symbol "package", Atom name] : map lispify decl
 
 instance Lispable Decl where
-    -- (include name (&rest hiding))
-    -- (import name (&rest hiding))
-    -- (module name &body rest)
-    -- (function name (&rest args) (&optional type) body)
-    -- (type name parent (&rest vars) fields) ; where vars is a list of (name type)
-    -- (concept name (&rest args) timing &rest vars) ; where vars is a list of (name type)
-    -- (instance name (&rest args) impl &rest vars)
-    -- (var name (&optional type) body)
-    lispify (Include name hiding) =
-        List $ [Symbol "include", Atom name, List $ map Atom hiding]
-    lispify (Import name hiding) =
-        List $ [Symbol "import", Atom name, List $ map Atom hiding]
-    lispify (Module name internals) =
-        List $ [Symbol "module", Atom name] ++ map lispify internals
-    lispify (Function type_ name args impl) =
-        List $ [Symbol "function", Atom name, List $ map Atom args,
+    -- (include pos name (&rest hiding))
+    -- (import pos name (&rest hiding))
+    -- (module pos name &body rest)
+    -- (function pos name (&rest args) (&optional type) body)
+    -- (type pos name parent (&rest vars) fields)
+    --   ; where vars is a list of (name type)
+    -- (concept pos name (&rest args) timing &rest vars)
+    --   ; where vars is a list of (name type)
+    -- (instance pos name (&rest args) impl &rest vars)
+    -- (var pos name (&optional type) body)
+    lispify (Include pos name hiding) =
+        List $ [Symbol "include", lispify pos, Atom name, List $ map Atom hiding]
+    lispify (Import pos name hiding) =
+        List $ [Symbol "import", lispify pos, Atom name, List $ map Atom hiding]
+    lispify (Module pos name internals) =
+        List $ [Symbol "module", lispify pos, Atom name] ++ map lispify internals
+    lispify (Function pos type_ name args impl) =
+        List $ [Symbol "function", lispify pos, Atom name, List $ map Atom args,
                 List (maybe [] (\x -> [lispify x]) type_), lispify impl]
-    lispify (Type name parent vars fields) =
-        List $ [Symbol "type", Atom name, lispify parent, List $ map lispify' vars,
-                lispify fields]
-    lispify (Concept name args bind vars) =
-        List $ [Symbol "concept", Atom name, List $ map Atom args, timing] ++
+    lispify (Type pos name parent vars fields) =
+        List $ [Symbol "type", lispify pos, Atom name, lispify parent,
+                List $ map lispify' vars, lispify fields]
+    lispify (Concept pos name args bind vars) =
+        List $ [Symbol "concept", lispify pos, Atom name, List $ map Atom args, timing] ++
              map lispify' vars
         where timing = case bind of
                          Static -> Symbol "static"
                          Dynamic -> Symbol "dynamic"
-    lispify (Instance name args impl vars) =
-        List $ [Symbol "instance", Atom name, List $ map lispify args, lispify impl]
+    lispify (Instance pos name args impl vars) =
+        List $ [Symbol "instance", lispify pos, Atom name,
+                List $ map lispify args, lispify impl]
                  ++ map lispify vars
-    lispify (Variable type_ name val) =
-        List $ [Symbol "var", Atom name, List (maybe [] (\x -> [lispify x]) type_),
-                lispify val]
+    lispify (Variable pos type_ name val) =
+        List $ [Symbol "var", lispify pos,  Atom name,
+                List (maybe [] (\x -> [lispify x]) type_), lispify val]
 
 instance Lispable Type where
-    -- (tuple-type acc &rest types)
-    -- (named-type name acc &rest args)
-    -- (func-type (&rest args) result)
-    lispify (Tuple xs acc) =
-        List $ [Symbol "tuple-type", lispify acc] ++ map lispify xs
-    lispify (Named name args acc) =
-        List $ [Symbol "named-type", Atom name, lispify acc] ++ map lispify args
-    lispify (Func args result) =
-        List $ [Symbol "func-type", List $ map lispify args, lispify result]
-{-
-instance Lispable Stmt where
-    -- (stmt expr &optional cond)
-    --   cond == (if expr) or (unless expr)
-    lispify (Stmt expr cond) = List $ [Symbol "stmt", lispify expr] ++ handleCond cond
-        where handleCond Nothing = []
-              handleCond (Just (If, expr1)) = [Symbol "if", lispify expr1]
-              handleCond (Just (Unless, expr1)) = [Symbol "unless", lispify expr1]
--}
+    -- (tuple-type pos acc &rest types)
+    -- (named-type pos name acc &rest args)
+    -- (func-type pos (&rest args) result)
+    lispify (Tuple pos xs acc) =
+        List $ [Symbol "tuple-type", lispify pos, lispify acc] ++ map lispify xs
+    lispify (Named pos name args acc) =
+        List $ [Symbol "named-type", lispify pos, Atom name, lispify acc] ++
+             map lispify args
+    lispify (Func pos args result) =
+        List $ [Symbol "func-type", lispify pos, List $ map lispify args, lispify result]
+
 instance Lispable Fields where
     -- (&rest fields) ; where each field is (name access)
     lispify (Fields mp) = List . map convert $ toList mp
         where convert (str, acc) = List [Atom str, lispify acc]
 
 instance Lispable Expr where
-    -- (call expr &rest args)
-    -- (dot lhs name &rest args
-    -- (block &body rest)
-    -- literal
-    -- (tuple &rest args)
-    -- (list &rest args)
-    -- (declare decl)
-    -- (asn pattern expr)
-    -- (subscript expr &rest args)
-    -- (id name)
-    -- opexpr
-    -- (if cond true &optional false)
-    -- (unless cond true &optional false)
-    -- (for type expr body) ; where type is = or <-
-    -- (case expr &rest clauses) ; where clauses are (pattern (&optional guard) body)
-    -- (cond (&rest rest) &optional else) ; where rest is (expr0 expr1x)
-    lispify (FunctionCall expr args) =
-        List $ [Symbol "call", lispify expr] ++ map lispify args
-    lispify (DotCall expr string args) =
-        List $ [Symbol "dot", lispify expr, Atom string] ++ map lispify args
-    lispify (Block stmts) =
-        List $ Symbol "block" : map lispify stmts
-    lispify (Literal token) =
-        lispify token
-    lispify (TupleExpr args) =
-        List $ Symbol "tuple" : map lispify args
-    lispify (ListExpr args) =
-        List $ Symbol "list" : map lispify args
-    lispify (Declare decl) =
-        List $ [Symbol "declare", lispify decl]
-    lispify (VarAsn name expr) =
-        List $ [Symbol "asn", lispify name, lispify expr]
-    lispify (Subscript expr args) =
-        List $ [Symbol "subscript", lispify expr] ++ map lispify args
-    lispify (Ident str) =
-        List [Symbol "id", Atom str]
-    lispify (Oper expr) =
-        lispify expr
-    lispify (IfStmt if_ cond true false) =
-        List $ [lispify if_, lispify cond, lispify true] ++ case false of
-                                                              Just x -> [lispify x]
-                                                              Nothing -> []
-    lispify (ForStmt for ptn expr body) =
-        List $ [Symbol "for", lispify for, lispify ptn, lispify expr, lispify body]
-    lispify (Case expr clauses) =
-        List $ [Symbol "case", lispify expr] ++ map handleClause clauses
+    -- (call pos expr &rest args)
+    -- (dot pos lhs name &rest args
+    -- (block pos &body rest)
+    -- (lit pos literal)
+    -- (tuple pos &rest args)
+    -- (list pos &rest args)
+    -- (declare pos decl)
+    -- (asn pos pattern expr)
+    -- (subscript pos expr &rest args)
+    -- (id pos name)
+    -- (op pos opexpr)
+    -- (if pos cond true &optional false)
+    -- (unless pos cond true &optional false)
+    -- (for pos type expr body) ; where type is = or <-
+    -- (case pos expr &rest clauses) ; where clauses are (pattern (&optional guard) body)
+    -- (cond pos (&rest rest) &optional else) ; where rest is (expr0 expr1x)
+    lispify (FunctionCall pos expr args) =
+        List $ [Symbol "call", lispify pos, lispify expr] ++ map lispify args
+    lispify (DotCall pos expr string args) =
+        List $ [Symbol "dot", lispify pos, lispify expr, Atom string] ++ map lispify args
+    lispify (Block pos stmts) =
+        List $ [Symbol "block", lispify pos] ++ map lispify stmts
+    lispify (Literal pos token) =
+        List $ [Symbol "lit", lispify pos, lispify token]
+    lispify (TupleExpr pos args) =
+        List $ [Symbol "tuple", lispify pos] ++ map lispify args
+    lispify (ListExpr pos args) =
+        List $ [Symbol "list", lispify pos] ++ map lispify args
+    lispify (Declare pos decl) =
+        List $ [Symbol "declare", lispify pos, lispify decl]
+    lispify (VarAsn pos name expr) =
+        List $ [Symbol "asn", lispify pos, lispify name, lispify expr]
+    lispify (Subscript pos expr args) =
+        List $ [Symbol "subscript", lispify pos, lispify expr] ++ map lispify args
+    lispify (Ident pos str) =
+        List $ [Symbol "id", lispify pos, Atom str]
+    lispify (Oper pos expr) =
+        List $ [Symbol "op", lispify pos, lispify expr]
+    lispify (IfStmt pos if_ cond true false) =
+        List $ [lispify if_, lispify pos, lispify cond, lispify true] ++
+             case false of
+               Just x -> [lispify x]
+               Nothing -> []
+    lispify (ForStmt pos for ptn expr body) =
+        List $ [Symbol "for", lispify pos, lispify for, lispify ptn,
+                lispify expr, lispify body]
+    lispify (Case pos expr clauses) =
+        List $ [Symbol "case", lispify pos, lispify expr] ++ map handleClause clauses
             where handleClause (ptn, Nothing, body) =
                       List [lispify ptn, List [], lispify body]
                   handleClause (ptn, Just x, body) =
                       List [lispify ptn, List [lispify x], lispify body]
-    lispify (Cond rest else_) =
-        List $ [Symbol "cond", clauses] ++ elseClause
+    lispify (Cond pos rest else_) =
+        List $ [Symbol "cond", lispify pos, clauses] ++ elseClause
             where clauses = List $ map (\(e0, e1) -> List [lispify e0, lispify e1]) rest
                   elseClause = case else_ of
                                  Just x -> [lispify x]
@@ -214,25 +213,35 @@ instance Lispable Conditional where
     lispify (BindExpr lhs rhs) = List [Symbol "bind", lispify lhs, lispify rhs]
 
 instance Lispable Pattern where
-    -- (pattern-tuple &rest args)
-    -- (pattern-list &rest args)
-    -- (pattern-splat (&rest args0) splat (&rest args1))
-    -- (pattern-id name)
-    -- (pattern-type name &rest args)
-    -- (pattern-expr expr)
-    -- (pattern-underscore)
-    lispify (TuplePattern args) = List $ Symbol "pattern-tuple" : map lispify args
-    lispify (ListPattern args) = List $ Symbol "pattern-list" : map lispify args
-    lispify (SplatPattern a0 mid a1) = List $ [Symbol "pattern-splat"] ++
-                                       map lispify a0 ++ [Atom mid] ++ map lispify a1
-    lispify (IdPattern name) = List $ [Symbol "pattern-id", Atom name]
-    lispify (TypePattern name args) = List $ [Symbol "pattern-type", Atom name] ++
-                                      map lispify args
-    lispify (ExprPattern expr) = List $ [Symbol "pattern-expr", lispify expr]
-    lispify UnderscorePattern = List $ [Symbol "pattern-underscore"]
+    -- (pattern-tuple pos &rest args)
+    -- (pattern-list pos &rest args)
+    -- (pattern-splat pos (&rest args0) splat (&rest args1))
+    -- (pattern-id pos name)
+    -- (pattern-type pos name &rest args)
+    -- (pattern-expr pos expr)
+    -- (pattern-underscore pos)
+    lispify (TuplePattern pos args) =
+        List $ [Symbol "pattern-tuple", lispify pos] ++ map lispify args
+    lispify (ListPattern pos args) =
+        List $ [Symbol "pattern-list", lispify pos] ++ map lispify args
+    lispify (SplatPattern pos a0 mid a1) =
+        List $ [Symbol "pattern-splat", lispify pos] ++
+             map lispify a0 ++ [Atom mid] ++ map lispify a1
+    lispify (IdPattern pos name) =
+        List $ [Symbol "pattern-id", lispify pos, Atom name]
+    lispify (TypePattern pos name args) =
+        List $ [Symbol "pattern-type", lispify pos, Atom name] ++
+             map lispify args
+    lispify (ExprPattern pos expr) =
+        List $ [Symbol "pattern-expr", lispify pos, lispify expr]
+    lispify (UnderscorePattern pos) =
+        List $ [Symbol "pattern-underscore", lispify pos]
 
 instance Lispable a => Lispable [a] where
     lispify = List . map lispify
+
+instance Lispable SourcePos where
+    lispify src = List [Symbol . show $ sourceLine src, Symbol . show $ sourceColumn src]
 
 output :: Lispable a => Output -> a -> IO ()
 output StdOut = printSexp . lispify

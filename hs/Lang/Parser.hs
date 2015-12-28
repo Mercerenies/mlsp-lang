@@ -12,55 +12,58 @@ import Data.Map(Map)
 import Text.Parsec.Prim
 import Text.Parsec.Combinator
 import Text.Parsec.Error(ParseError)
+import Text.Parsec.Pos(SourcePos)
 import Control.Monad
 
 data FileData = FileData String [Decl] -- Package, declarations
-                deriving (Show, Read, Eq)
+                deriving (Show, Eq)
 
-data Decl = Import String [String] | -- Name, hiding
-            Include String [String] | -- Name, hiding
-            Module String [Decl] |
-            Function (Maybe Type) String [String] Expr |
-            Type String Type [(String, Type)] Fields | -- Name, parent, variables, fields
-            Concept String [String] Timing [(String, Type)] | -- Name, args, variables
-            Instance String [Type] Type [Decl] |
-            Variable (Maybe Type) String Expr
-            deriving (Show, Read, Eq)
+data Decl = Import SourcePos String [String] | -- Name, hiding
+            Include SourcePos String [String] | -- Name, hiding
+            Module SourcePos String [Decl] |
+            Function SourcePos (Maybe Type) String [String] Expr |
+            -- Name, parent, variables, fields
+            Type SourcePos String Type [(String, Type)] Fields |
+            -- Name, args, variables
+            Concept SourcePos String [String] Timing [(String, Type)] |
+            Instance SourcePos String [Type] Type [Decl] |
+            Variable SourcePos (Maybe Type) String Expr
+            deriving (Show, Eq)
 
-data Type = Tuple [Type] Access |
-            Named String [Type] Access |
-            Func [Type] Type
-            deriving (Show, Read, Eq)
+data Type = Tuple SourcePos [Type] Access |
+            Named SourcePos String [Type] Access |
+            Func SourcePos [Type] Type
+            deriving (Show, Eq)
 
-data Expr = FunctionCall Expr [Expr] |
-            DotCall Expr String [Expr] |
-            Block [Expr] |
-            Literal Token |
-            TupleExpr [Expr] |
-            ListExpr [Expr] |
-            Declare Decl |
-            VarAsn Pattern Expr |
-            Subscript Expr [Expr] |
-            Ident String |
-            Oper (OpExpr Expr) |
-            IfStmt IfOp Conditional Expr (Maybe Expr) |
-            ForStmt ForOp Pattern Expr Expr |
-            Case Expr [(Pattern, Maybe Expr, Expr)] |
-            Cond [(Conditional, Expr)] (Maybe Expr)
-            deriving (Show, Read, Eq)
+data Expr = FunctionCall SourcePos Expr [Expr] |
+            DotCall SourcePos Expr String [Expr] |
+            Block SourcePos [Expr] |
+            Literal SourcePos Token |
+            TupleExpr SourcePos [Expr] |
+            ListExpr SourcePos [Expr] |
+            Declare SourcePos Decl |
+            VarAsn SourcePos Pattern Expr |
+            Subscript SourcePos Expr [Expr] |
+            Ident SourcePos String |
+            Oper SourcePos (OpExpr Expr) |
+            IfStmt SourcePos IfOp Conditional Expr (Maybe Expr) |
+            ForStmt SourcePos ForOp Pattern Expr Expr |
+            Case SourcePos Expr [(Pattern, Maybe Expr, Expr)] |
+            Cond SourcePos [(Conditional, Expr)] (Maybe Expr)
+            deriving (Show, Eq)
 
-data Pattern = TuplePattern [Pattern] |
-               ListPattern [Pattern] |
-               SplatPattern [Pattern] String [Pattern] |
-               IdPattern String |
-               TypePattern String [Pattern] |
-               ExprPattern Expr |
-               UnderscorePattern
-               deriving (Show, Read, Eq)
+data Pattern = TuplePattern SourcePos [Pattern] |
+               ListPattern SourcePos [Pattern] |
+               SplatPattern SourcePos [Pattern] String [Pattern] |
+               IdPattern SourcePos String |
+               TypePattern SourcePos String [Pattern] |
+               ExprPattern SourcePos Expr |
+               UnderscorePattern SourcePos
+               deriving (Show, Eq)
 
 data Conditional = CondExpr Expr |
                    BindExpr Pattern Expr
-                   deriving (Show, Read, Eq)
+                   deriving (Show, Eq)
 
 newtype Fields = Fields (Map String Access)
     deriving (Show, Read, Eq)
@@ -112,7 +115,8 @@ importInclude = do
                   newlines
                   operator ")"
                   return inside
-  return $ constr name hiding
+  pos <- getPosition
+  return $ constr pos name hiding
 
 moduleDecl :: EParser Decl
 moduleDecl = do
@@ -122,7 +126,8 @@ moduleDecl = do
   newlines1
   contents <- many (toplevel <* newlines1)
   keyword "end"
-  return $ Module (intercalate "." name) contents
+  pos <- getPosition
+  return $ Module pos (intercalate "." name) contents
 
 functionDecl :: EParser Decl
 functionDecl = do
@@ -141,18 +146,21 @@ functionDecl = do
   operator "="
   newlines
   stmt <- statement
-  return $ Function type' name args stmt
+  pos <- getPosition
+  return $ Function pos type' name args stmt
 
 typeDecl :: EParser Decl
 typeDecl = do
   keyword "type"
   newlines
   name <- identifier
-  parent <- option (Named "T" [] Read) $ operator "(" *> typeExpr <* operator ")"
+  pos0 <- getPosition
+  parent <- option (Named pos0 "T" [] Read) $ operator "(" *> typeExpr <* operator ")"
   newlines1
   (types, fields) <- typeInterior
   keyword "end"
-  return $ Type name parent types fields
+  pos <- getPosition
+  return $ Type pos name parent types fields
 
 typeInterior :: EParser ([(String, Type)], Fields)
 typeInterior = do
@@ -195,7 +203,8 @@ tupleTypeExpr = do
   newlines
   operator "}"
   access <- accessSuffix
-  return $ Tuple contents access
+  pos <- getPosition
+  return $ Tuple pos contents access
 
 namedTypeExpr :: EParser Type
 namedTypeExpr = do
@@ -208,7 +217,8 @@ namedTypeExpr = do
                   operator "]"
                   return args'
   access <- accessSuffix
-  return $ Named name args access
+  pos <- getPosition
+  return $ Named pos name args access
 
 funcTypeExpr :: EParser Type
 funcTypeExpr = do
@@ -220,7 +230,8 @@ funcTypeExpr = do
   operator "->"
   newlines
   rhs <- typeExpr
-  return $ Func lhs rhs
+  pos <- getPosition
+  return $ Func pos lhs rhs
 
 conceptDecl :: EParser Decl
 conceptDecl = do
@@ -238,7 +249,8 @@ conceptDecl = do
   newlines1
   internals <- endBy typeSpec newlines1
   keyword "end"
-  return $ Concept name args binding internals
+  pos <- getPosition
+  return $ Concept pos name args binding internals
 
 instanceDecl :: EParser Decl
 instanceDecl = do
@@ -256,7 +268,8 @@ instanceDecl = do
   newlines1
   internals <- endBy functionDecl newlines1
   keyword "end"
-  return $ Instance name args impl internals
+  pos <- getPosition
+  return $ Instance pos name args impl internals
 
 statement :: EParser Expr
 statement = do
@@ -265,9 +278,10 @@ statement = do
               op' <- If <$ keyword "if" <|> Unless <$ keyword "unless"
               cond <- condit
               return (op', cond)
+  pos <- getPosition
   case op of
     Nothing -> return expr
-    Just (kw, cond) -> return $ IfStmt kw cond expr Nothing
+    Just (kw, cond) -> return $ IfStmt pos kw cond expr Nothing
 
 -- Check tlCallExpr here before anything else so that f[1] parses as access, not
 -- a call on a list
@@ -286,25 +300,28 @@ toplevelExpr = try tlCallExpr <|> try funcSyntax <|> try callSyntax <|> basicExp
             restArgs <- many (nlPrecedingComma *> basicExpr)
             when (null restArgs && paren) $
                  fail "top paren error; if you see this message, please report it"
-            return $ FunctionCall (Ident name) (firstArg : restArgs)
+            pos <- getPosition
+            return $ FunctionCall pos (Ident pos name) (firstArg : restArgs)
           callSyntax = do
             call <- callLHS
             operator "."
             newlines
             func <- funcSyntax
             case func of
-              FunctionCall (Ident expr) args -> return $ DotCall call expr args
-              _ -> fail "call syntax fail error; report this message if you see it"
+              FunctionCall pos (Ident _ expr) args ->
+                  return $ DotCall pos call expr args
+              _ ->
+                  fail "call syntax fail error; report this message if you see it"
           nlPrecedingComma = operator "," <* newlines
 
 basicExpr :: EParser Expr
-basicExpr = Oper <$> operatorExpr basicTerm <?> "basic expression"
+basicExpr = Oper <$> getPosition <*> operatorExpr basicTerm <?> "basic expression"
 
 basicTerm :: EParser Expr
 basicTerm = beginEndExpr <|> ifExpr <|> forExpr <|> caseExpr <|> condExpr <|>
             parenExpr <|> try varAsn <|> literalExpr <|> tupleExpr <|> listExpr <|>
-            try (Declare <$> varDecl) <|> try (Declare <$> functionDecl) <|>
-            try callExpr
+            try (Declare <$> getPosition <*> varDecl) <|>
+            try (Declare <$> getPosition <*> functionDecl) <|> try callExpr
 
 beginEndExpr :: EParser Expr
 beginEndExpr = do
@@ -312,7 +329,8 @@ beginEndExpr = do
   newlines1
   stmts <- endBy statement newlines1
   keyword "end"
-  return $ Block stmts
+  pos <- getPosition
+  return $ Block pos stmts
 
 ifExpr :: EParser Expr
 ifExpr = do
@@ -320,7 +338,8 @@ ifExpr = do
   newlines
   cond <- condit
   (true, false) <- oneLine <|> multiLine
-  return $ IfStmt kw cond true false
+  pos <- getPosition
+  return $ IfStmt pos kw cond true false
     where oneLine = do
             keyword "then"
             newlines
@@ -338,7 +357,8 @@ ifExpr = do
                                  newlines1
                                  many (statement <* newlines1)
                       keyword "end"
-                      return (Block $ true, Block <$> false)
+                      pos <- getPosition
+                      return (Block pos true, Block pos <$> false)
 
 -- ///// For and Case
 
@@ -352,7 +372,8 @@ forExpr = do
   newlines
   expr <- toplevelExpr
   inner <- oneLine <|> multiLine
-  return $ ForStmt op ptn expr inner
+  pos <- getPosition
+  return $ ForStmt pos op ptn expr inner
       where oneLine = do
               keyword "then"
               newlines
@@ -361,7 +382,8 @@ forExpr = do
                         newlines1
                         expr <- many (statement <* newlines1)
                         keyword "end"
-                        return $ Block expr
+                        pos <- getPosition
+                        return $ Block pos expr
 
 caseExpr :: EParser Expr
 caseExpr = do
@@ -371,7 +393,8 @@ caseExpr = do
   newlines1
   clauses <- many (clause <* newlines1)
   keyword "end"
-  return $ Case expr clauses
+  pos <- getPosition
+  return $ Case pos expr clauses
     where clause = do
              keyword "when"
              newlines
@@ -386,7 +409,7 @@ caseExpr = do
                      keyword "then"
                      newlines
                      toplevelExpr
-          multiLine = Block <$> many (try $ newlines1 *> statement)
+          multiLine = Block <$> getPosition <*> many (try $ newlines1 *> statement)
 
 condExpr :: EParser Expr
 condExpr = do
@@ -396,9 +419,10 @@ condExpr = do
   else_ <- optionMaybe $ do
              keyword "else"
              newlines
-             Block <$> many (statement <* newlines1)
+             Block <$> getPosition <*> many (statement <* newlines1)
   keyword "end"
-  return $ Cond clauses else_
+  pos <- getPosition
+  return $ Cond pos clauses else_
     where clause = do
              keyword "when"
              newlines
@@ -409,7 +433,7 @@ condExpr = do
                      keyword "then"
                      newlines
                      toplevelExpr
-          multiLine = Block <$> many (try $ newlines1 *> statement)
+          multiLine = Block <$> getPosition <*> many (try $ newlines1 *> statement)
 
 parenExpr :: EParser Expr
 parenExpr = operator "(" *> newlines *>
@@ -428,8 +452,9 @@ literalExpr = do
                                           Symbol {} -> True
                                           _ -> False
                            _ -> False
+  pos <- getPosition
   case lex of
-    Token x _ -> return $ Literal x
+    Token x _ -> return $ Literal pos x
     _ -> unexpected "newline"
 
 tupleExpr :: EParser Expr
@@ -439,7 +464,8 @@ tupleExpr = do
   contents <- sepBy basicExpr nlComma
   newlines
   operator "}"
-  return $ TupleExpr contents
+  pos <- getPosition
+  return $ TupleExpr pos contents
 
 listExpr :: EParser Expr
 listExpr = do
@@ -448,7 +474,8 @@ listExpr = do
   contents <- sepBy basicExpr nlComma
   newlines
   operator "]"
-  return $ ListExpr contents
+  pos <- getPosition
+  return $ ListExpr pos contents
 
 varDecl :: EParser Decl
 varDecl = do
@@ -465,7 +492,8 @@ varDecl = do
   operator "="
   newlines
   stmt <- statement
-  return $ Variable type' name stmt
+  pos <- getPosition
+  return $ Variable pos type' name stmt
 
 varAsn :: EParser Expr
 varAsn = do
@@ -475,6 +503,7 @@ varAsn = do
         operator "||="
   newlines
   expr <- toplevelExpr
+  pos0 <- getPosition
   (name', expr') <-
       case name of
         Right name ->
@@ -482,30 +511,38 @@ varAsn = do
               Token (Operator "=") _ ->
                   return (Right name, expr)
               Token (Operator "+=") _ ->
-                  return (Right name, Oper (Inf (OpExpr name) Plus (OpExpr expr)))
+                  return (Right name, Oper pos0 (Inf (OpExpr name) Plus (OpExpr expr)))
               Token (Operator "-=") _ ->
-                  return (Right name, Oper (Inf (OpExpr name) Minus (OpExpr expr)))
+                  return (Right name, Oper pos0 (Inf (OpExpr name) Minus (OpExpr expr)))
               Token (Operator "*=") _ ->
-                  return (Right name, Oper (Inf (OpExpr name) Times (OpExpr expr)))
+                  return (Right name, Oper pos0 (Inf (OpExpr name) Times (OpExpr expr)))
               Token (Operator "/=") _ ->
-                  return (Right name, Oper (Inf (OpExpr name) Div (OpExpr expr)))
+                  return (Right name, Oper pos0 (Inf (OpExpr name) Div (OpExpr expr)))
               Token (Operator "&&=") _ ->
-                  return (Right name, Oper (Inf (OpExpr name) UniversalAnd (OpExpr expr)))
+                  return (Right name, Oper pos0
+                                    (Inf (OpExpr name) UniversalAnd (OpExpr expr)))
               Token (Operator "||=") _ ->
-                  return (Right name, Oper (Inf (OpExpr name) UniversalOr (OpExpr expr)))
+                  return (Right name, Oper pos0
+                                    (Inf (OpExpr name) UniversalOr (OpExpr expr)))
               _ -> fail "variable assignment operator failed; report this message"
         Left _ ->
             case op of
               Token (Operator "=") _ -> return (name, expr)
               _ -> unexpected "compound assignment on pattern"
+  pos <- getPosition
   case name' of
-    Left pat -> return $ VarAsn pat expr'
-    Right (Ident x) -> return $ VarAsn (IdPattern x) expr'
-    Right (DotCall lhs name' rhs) -> return $ DotCall lhs (name' ++ "_asn") (expr' : rhs)
-    _ -> fail "variable assignment syntax failed; report this message"
+    Left pat ->
+        return $ VarAsn pos pat expr'
+    Right (Ident pos' x) ->
+        return $ VarAsn pos (IdPattern pos' x) expr'
+    Right (DotCall _ lhs name' rhs) ->
+        return $ DotCall pos lhs (name' ++ "_asn") (expr' : rhs)
+    _ ->
+        fail "variable assignment syntax failed; report this message"
 
 callLHS :: EParser Expr
-callLHS = Ident <$> identifier <|> operator "(" *> toplevelExpr <* operator ")"
+callLHS = Ident <$> getPosition <*> identifier <|>
+          operator "(" *> toplevelExpr <* operator ")"
 
 callExpr :: EParser Expr
 callExpr = do
@@ -518,14 +555,16 @@ callExpr = do
               args <- sepBy basicExpr nlComma
               newlines
               operator ")"
-              return (Paren, args)
+              pos <- getPosition
+              return (Paren, pos, args)
             bracketCall = do
               operator "["
               newlines
               args <- sepBy basicExpr nlComma
               newlines
               operator "]"
-              return (Bracket, args)
+              pos <- getPosition
+              return (Bracket, pos, args)
             dotCall = do
               operator "."
               newlines
@@ -537,10 +576,11 @@ callExpr = do
                           newlines
                           operator ")"
                           return args'
-              return (Dot funcName, args)
-            foldFunc expr (Paren, args) = FunctionCall expr args
-            foldFunc expr (Bracket, args) = Subscript expr args
-            foldFunc expr (Dot name, args) = DotCall expr name args
+              pos <- getPosition
+              return (Dot funcName, pos, args)
+            foldFunc expr (Paren, pos, args) = FunctionCall pos expr args
+            foldFunc expr (Bracket, pos, args) = Subscript pos expr args
+            foldFunc expr (Dot name, pos, args) = DotCall pos expr name args
 
 -- A rather bizarre workaround for non-ambiguity's sake. See toplevelExpr for details.
 tlCallExpr :: EParser Expr
@@ -559,31 +599,34 @@ condit = try bindExpr <|> CondExpr <$> toplevelExpr
 
 pattern :: EParser Pattern
 pattern = tuplePattern <|> listPattern <|> exprPattern <|>
-          UnderscorePattern <$ matchToken (Identifier "_") <|>
+          UnderscorePattern <$> (matchToken (Identifier "_") *> getPosition) <|>
           try typePattern <|> idPattern <?> "pattern"
 
 tuplePattern :: EParser Pattern
 tuplePattern = operator "{" *> newlines *>
-               (TuplePattern <$> sepBy pattern nlComma)
+               (TuplePattern <$> getPosition <*> sepBy pattern nlComma)
                <* newlines <* operator "}"
 
 listPattern :: EParser Pattern
 listPattern = do
   operator "[" >> newlines
   args <- sepBy pattern nlComma
-  result <- option (ListPattern args) $ do
+  pos0 <- getPosition
+  result <- option (ListPattern pos0 args) $ do
                 operator "..."
                 rest <- many $ nlComma *>  pattern
                 case args of
                   [] -> unexpected "ellipsis"
                   _ -> case last args of
-                         IdPattern pat -> return $ SplatPattern (init args) pat rest
-                         _ -> unexpected "pattern" <?> "identifier"
+                         IdPattern pos pat ->
+                             return $ SplatPattern pos (init args) pat rest
+                         _ ->
+                             unexpected "pattern" <?> "identifier"
   newlines >> operator "]"
   return result
 
 exprPattern :: EParser Pattern
-exprPattern = ExprPattern <$> (operator "^" *> newlines *> toplevelExpr)
+exprPattern = ExprPattern <$> getPosition <*> (operator "^" *> newlines *> toplevelExpr)
 
 typePattern :: EParser Pattern
 typePattern = do
@@ -596,10 +639,11 @@ typePattern = do
   args <- sepBy pattern nlComma
   newlines
   operator "]"
-  return $ TypePattern name args
+  pos <- getPosition
+  return $ TypePattern pos name args
 
 idPattern :: EParser Pattern
-idPattern = IdPattern <$> identifier
+idPattern = IdPattern <$> getPosition <*> identifier
 
 accessSuffix :: EParser Access
 accessSuffix = option Read $ ReadWrite <$ operator "!"
