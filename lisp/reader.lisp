@@ -9,6 +9,7 @@
 (defgeneric read-decl (head body))
 
 ; /////
+; TODO Handle nested modules within directories correctly
 
 (defun interpret-decl (expr)
   (read-decl (car expr) (cdr expr)
@@ -23,4 +24,4 @@
 
 (defun read-code-file (filename)
   (with-open-file (stream filename :direction :input)
-    (read-code stream)))
+    (read-code stream filename)))
