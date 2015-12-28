@@ -1,16 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Lang.Tokens(Newline(..), Token(..), TextToken(..), Lexeme, EParser,
+module Lang.Tokens(Token(..), TextToken(..), Lexeme(..), EParser,
                    satisfy, matchLexeme, matchToken, newline, newlines,
                    newlines1, identifier, keyword, operator,
                    keywords, operators, reDelimiters) where
 
 import Control.Monad
 import Text.Parsec.Prim
-import Text.Parsec.Pos(updatePosChar)
-
-data Newline = Newline
-               deriving (Show, Read, Eq)
+import Text.Parsec.Pos
 
 data Token =
     Keyword String |
@@ -27,7 +24,9 @@ data Token =
 data TextToken = Text String | Interp String
                  deriving (Show, Read, Eq)
 
-type Lexeme = Either Token Newline
+data Lexeme = Token Token SourcePos |
+              Newline
+              deriving (Show, Eq)
 
 type EParser = Parsec [Lexeme] ()
 
@@ -35,21 +34,23 @@ type EParser = Parsec [Lexeme] ()
 --      doesn't work too well for rows either right now)
 satisfy :: Stream s m Lexeme => (Lexeme -> Bool) -> ParsecT s u m Lexeme
 satisfy p = tokenPrim show update test
-    where update src (Right Newline) _ = updatePosChar src '\n'
-          update src (Left _) _ = updatePosChar src ' '
+    where update _   (Token _ pos) _ = pos
+          update src Newline   _ = src
           test x = guard (p x) >> return x
 
 matchLexeme :: Stream s m Lexeme => Lexeme -> ParsecT s u m Lexeme
 matchLexeme lex = satisfy (== lex)
 
 matchToken :: Stream s m Lexeme => Token -> ParsecT s u m Lexeme
-matchToken = matchLexeme . Left
+matchToken tok = satisfy $ \x -> case x of
+                                   Token y _ -> y == tok
+                                   _ -> False
 
 newline :: Stream s m Lexeme => ParsecT s u m Lexeme
-newline = matchLexeme (Right Newline) <?> "newline"
+newline = matchLexeme Newline <?> "newline"
 
 newlines :: Stream s m Lexeme => ParsecT s u m ()
-newlines = void . many $ matchLexeme (Right Newline)
+newlines = void . many $ matchLexeme Newline
 
 newlines1 :: Stream s m Lexeme => ParsecT s u m ()
 newlines1 = newline >> newlines
@@ -57,11 +58,11 @@ newlines1 = newline >> newlines
 identifier :: Stream s m Lexeme => ParsecT s u m String
 identifier = do
   let isIdentifier x = case x of
-                         Left (Identifier _) -> True
+                         Token (Identifier _) _ -> True
                          _ -> False
   ident <- satisfy isIdentifier <?> "identifier"
   case ident of
-    Left (Identifier str) -> return str
+    Token (Identifier str) _ -> return str
     _ -> unexpected "non-identifier token"
 
 keyword :: Stream s m Lexeme => String -> ParsecT s u m Lexeme

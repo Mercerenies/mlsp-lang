@@ -419,18 +419,18 @@ parenExpr = operator "(" *> newlines *>
 literalExpr :: EParser Expr
 literalExpr = do
   lex <- satisfy $ \x -> case x of
-                           Left y -> case y of
-                                       ReMatch {} -> True
-                                       ReSub {} -> True
-                                       Number {} -> True
-                                       Character {} -> True
-                                       String {} -> True
-                                       Symbol {} -> True
-                                       _ -> False
-                           Right _ -> False
+                           Token y _ -> case y of
+                                          ReMatch {} -> True
+                                          ReSub {} -> True
+                                          Number {} -> True
+                                          Character {} -> True
+                                          String {} -> True
+                                          Symbol {} -> True
+                                          _ -> False
+                           _ -> False
   case lex of
-    Left x -> return $ Literal x
-    Right _ -> unexpected "newline"
+    Token x _ -> return $ Literal x
+    _ -> unexpected "newline"
 
 tupleExpr :: EParser Expr
 tupleExpr = do
@@ -479,24 +479,24 @@ varAsn = do
       case name of
         Right name ->
             case op of
-              Left (Operator "=") ->
+              Token (Operator "=") _ ->
                   return (Right name, expr)
-              Left (Operator "+=") ->
+              Token (Operator "+=") _ ->
                   return (Right name, Oper (Inf (OpExpr name) Plus (OpExpr expr)))
-              Left (Operator "-=") ->
+              Token (Operator "-=") _ ->
                   return (Right name, Oper (Inf (OpExpr name) Minus (OpExpr expr)))
-              Left (Operator "*=") ->
+              Token (Operator "*=") _ ->
                   return (Right name, Oper (Inf (OpExpr name) Times (OpExpr expr)))
-              Left (Operator "/=") ->
+              Token (Operator "/=") _ ->
                   return (Right name, Oper (Inf (OpExpr name) Div (OpExpr expr)))
-              Left (Operator "&&=") ->
+              Token (Operator "&&=") _ ->
                   return (Right name, Oper (Inf (OpExpr name) UniversalAnd (OpExpr expr)))
-              Left (Operator "||=") ->
+              Token (Operator "||=") _ ->
                   return (Right name, Oper (Inf (OpExpr name) UniversalOr (OpExpr expr)))
               _ -> fail "variable assignment operator failed; report this message"
         Left _ ->
             case op of
-              Left (Operator "=") -> return (name, expr)
+              Token (Operator "=") _ -> return (name, expr)
               _ -> unexpected "compound assignment on pattern"
   case name' of
     Left pat -> return $ VarAsn pat expr'

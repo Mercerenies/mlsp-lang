@@ -19,10 +19,12 @@ scan src str = parse tokens src (str ++ ";")
 -- TODO Consider a less cheat-y alternative to this semicolon here
 
 tokens :: Parsec String () [Lexeme]
-tokens = many (try spacedToken) <* many (void spaceish <|> comment) <* eof
-    where spacedToken = do
+tokens = contents <* many (void spaceish <|> comment) <* eof
+    where contents = many $ try spacedToken
+          spacedToken = do
             many (void spaceish <|> comment)
-            Right <$> newline_ <|> Left <$> token_
+            pos <- getPosition
+            newline_ <|> flip Token pos <$> token_
           spaceish = satisfy $ liftA2 (&&) isSpace (not . (`elem` "\r\n"))
           comment = try blockComment <|> try lineComment
 
@@ -37,7 +39,7 @@ token_ = try keyword <|>
          try symbol <|>
          try operator
 
-newline_ :: Parsec String () Newline
+newline_ :: Parsec String () Lexeme
 newline_ = Newline <$ oneOf "\r\n;"
 
 keyword :: Parsec String () Token
