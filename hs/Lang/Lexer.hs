@@ -6,8 +6,6 @@ import Text.Parsec hiding (tokens)
 import Control.Applicative hiding (many, (<|>))
 import Control.Monad
 
--- TODO Support the exclamation point at the end of identifiers for i.e. 'fields'
-
 alNumUnder :: Parsec String () Char
 alNumUnder = alphaNum <|> char '_'
 
@@ -50,7 +48,7 @@ operator = Operator <$> choice (map (try . string) operators)
 
 identifier :: Parsec String () Token
 identifier = do
-  str <- (:) <$> (char '$' <|> alphaUnder) <*> many alNumUnder
+  str <- (:) <$> (char '$' <|> char '@' <|> alphaUnder) <*> many alNumUnder
   return $ Identifier str
 
 integerNumber :: Parsec String () Integer

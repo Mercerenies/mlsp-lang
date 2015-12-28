@@ -30,8 +30,6 @@ data Lexeme = Token Token SourcePos |
 
 type EParser = Parsec [Lexeme] ()
 
--- TODO Keep track of source position (this doesn't work for columns and honestly
---      doesn't work too well for rows either right now)
 satisfy :: Stream s m Lexeme => (Lexeme -> Bool) -> ParsecT s u m Lexeme
 satisfy p = tokenPrim show update test
     where update _   (Token _ pos) _ = pos
