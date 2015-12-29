@@ -12,8 +12,15 @@
          :initform nil
          :type list)))
 
+(defclass package (named)
+  ())
+
 (defclass func (named)
   ())
 
-(defclass type (named)
+(defclass basic-type (named)
   ())
+
+; Create a package hierarchy based on the named in the identifier
+(defun package-hierarchy (name))
+; /////

@@ -1,6 +1,10 @@
 (defpackage #:mlsp)
 (in-package #:mlsp)
 
+; TODO Handle Haskell escape sequences which the Lisp reader won't handle
+
 (load "util.lisp")
+(load "error.lisp")
+(load "identifier.lisp")
 (load "types.lisp")
 (load "reader.lisp")
