@@ -2,12 +2,16 @@
 
 (defun initial-read (filename)
   (let ((errors nil)
+        (warnings nil)
         (*print-escape* nil)
         (result nil))
     (handler-bind
         ((code-error #'(lambda (c)
                          (format *error-output* "~A~%" c)
-                         (push c errors))))
+                         (push c errors)))
+         (code-warning #'(lambda (c)
+                           (format *error-output* "~A~%" c)
+                           (push c warnings))))
       (setf result (start-read-code filename)))
     (values result errors)))
 

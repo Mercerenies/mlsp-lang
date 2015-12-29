@@ -12,13 +12,13 @@
          :initform nil
          :type list)))
 
-(defclass basic-package (basic-module)
-  ())
-
 (defmethod print-object ((obj basic-module) stream)
   (print-unreadable-object (obj stream :type t)
     (format stream "~S ~S"
             (name obj) (module-decl obj))))
+
+(defclass basic-package (basic-module)
+  ())
 
 (defmethod print-object ((obj basic-package) stream)
   (print-unreadable-object (obj stream :type t)
@@ -29,7 +29,58 @@
   ())
 
 (defclass basic-type (named)
-  ())
+  ((parent :accessor type-parent
+           :initarg :parent
+           :initform nil
+           :type type-spec)
+   (vars :accessor type-args
+         :initarg :args
+         :initform nil
+         :type list)
+   (fields :accessor type-fields
+           :initarg :fields
+           :initform nil))) ; TODO Fields type
+
+(defmethod print-object ((obj basic-type) stream)
+  (print-unreadable-object (obj stream :type t)
+    (with-accessors ((args type-args) (parent type-parent)
+                     (name name) (fields type-fields))
+        (format stream "name=~A args=~A parent=~A fields=~A"
+                name args parent fields))))
+
+(deftype type-value ()
+  '(or type-spec (eql infer)))
+
+(deftype type-access ()
+  '(or read write))
+
+(defclass type-spec ()
+  ((access :accessor type-access
+           :initarg :access
+           :initform 'read
+           :type type-access)))
+
+(defclass type-tuple (type-spec)
+  ((constituents :accessor type-tuple-elem
+                 :initarg :elem
+                 :initform nil
+                 :type list)))
+
+(defclass type-named (named type-spec)
+  ((constituents :accessor type-named-elem
+                 :initarg :elem
+                 :initform nil
+                 :type list)))
+
+(defclass type-func (type-spec)
+  ((arguments :accessor type-func-args
+              :initarg :args
+              :initform nil
+              :type list)
+   (result :accessor type-func-result
+           :initarg :result
+           :initform nil
+           :type type-tuple)))
 
 (defun make-basic-package (name)
   (make-instance 'basic-package :name name))
@@ -50,8 +101,7 @@
                           (make-basic-package part))
         unless (is-plain-id part)
             do (signal 'name-error
-                       :message "decorated package name is not allowed"
-                       :pos *source-pos*)
+                       :message "decorated package name is not allowed")
             and do (loop-finish)
         when curr
             do (push package (module-decl curr))
