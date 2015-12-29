@@ -8,3 +8,4 @@
 (load "identifier.lisp")
 (load "types.lisp")
 (load "reader.lisp")
+(load "main.lisp")

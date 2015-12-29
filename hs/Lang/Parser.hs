@@ -122,12 +122,12 @@ moduleDecl :: EParser Decl
 moduleDecl = do
   keyword "module"
   newlines
-  name <- sepBy identifier (matchToken $ Operator ".")
+  name <- identifier
   newlines1
   contents <- many (toplevel <* newlines1)
   keyword "end"
   pos <- getPosition
-  return $ Module pos (intercalate "." name) contents
+  return $ Module pos name contents
 
 functionDecl :: EParser Decl
 functionDecl = do
@@ -359,8 +359,6 @@ ifExpr = do
                       keyword "end"
                       pos <- getPosition
                       return (Block pos true, Block pos <$> false)
-
--- ///// For and Case
 
 forExpr :: EParser Expr
 forExpr = do
