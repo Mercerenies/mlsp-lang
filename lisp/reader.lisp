@@ -51,11 +51,11 @@
     (signal 'verify-error :message "invalid module header")
     (return-from read-decl nil))
   (destructuring-bind (*source-pos* name . decls) body
-    (loop with *current-module* = (make-basic-module name)
+    (loop with *current-module* = (make-basic-module (intern name))
           for decl in decls
           for res = (interpret-decl decl)
           when res
-              do (push res (module-decl *current-module*))
+              do (put-object-in-module res *current-module*)
           finally (return *current-module*))))
 
 (defmethod read-decl ((head (eql 'type)) body)
@@ -65,19 +65,20 @@
   (destructuring-bind (*source-pos* name args parent vars fields) body
     ; TODO Check for duplicate fields, etc.
     (make-instance 'basic-type
-                   :name name :parent parent
-                   :args args
+                   :name (intern name)
+                   :parent (translate-spec parent)
+                   :args (mapcar #'intern args)
                    :vars (read-vars vars)
                    :fields (interpret-fields fields))))
 
-(defun read-vars (vars) ; ///// Not reading vars properly
+(defun read-vars (vars)
   (loop for var in vars
         append (if (/= (length var) 2)
                    (prog1 nil
                      (signal 'verify-error
                              :message "invalid instance var specifier"))
                    (destructuring-bind (name type) var
-                     (list (cons name (interpret-type type)))))))
+                     (list (cons (intern name) (interpret-type type)))))))
 
 (defun interpret-decl (expr)
   (unless (consp expr)
@@ -88,16 +89,16 @@
 (defun read-code (stream package-name)
   (loop with hierarchy = (package-hierarchy package-name)
         with *read-eval* = nil
-        with *current-package* = (first (last hierarchy))
+        with *current-package* = (first hierarchy)
         with *current-module* = *current-package*
         with res = nil
-        initially (push (first hierarchy) *packages*)
+        initially (push (first (last hierarchy)) *packages*)
         for expr = (read stream nil nil)
         while expr
         do (setf res (interpret-decl expr))
         when res
-            do (push res (module-decl *current-module*))
-        finally (return *current-package*)))
+            do (put-object-in-module res *current-module*)
+        finally (return (first (last hierarchy)))))
 
 (defun read-code-file (filename)
   (with-open-file (stream filename :direction :input)

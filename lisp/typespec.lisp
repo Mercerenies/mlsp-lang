@@ -6,27 +6,28 @@
 
 (defun translate-spec (type)
   (unless (and (consp type) (>= (length type) 3))
-    (signal 'verify-error :message (format nil "Invalid type specifier ~S" type))
+    (signal 'verify-error :message (format nil "invalid type specifier ~S" type))
     (return-from translate-spec '(t read)))
   (case (first type)
     (tuple-type (let ((*source-pos* (second type)))
                   `({} ,(third type) ,@(mapcar #'translate-spec (cdddr type)))))
     (named-type (let ((*source-pos* (second type)))
                   (if (>= (length type) 4)
-                      `(,(third type) ,(translate-spec (fourth type))
+                      `(,(intern (third type)) ,(fourth type)
                          ,@(mapcar #'translate-spec (cddddr type)))
                       (prog1 '(t read)
                         (signal 'verify-error
-                                :message (format nil "Invalid type specifier ~S"
+                                :message (format nil "invalid type specifier ~S"
                                                  type))))))
     (func-type (let ((*source-pos* (second type)))
                  (if (>= (length type) 4)
-                     `(-> ,(fourth type) ,@(mapcar #'translate-spec (third type)))
+                     `(-> ,(translate-spec (fourth type))
+                          ,@(mapcar #'translate-spec (third type)))
                      (prog1 '(t read)
                        (signal 'verify-error
-                               :message (format nil "Invalid type specifier ~S"
+                               :message (format nil "invalid type specifier ~S"
                                                 type))))))
-    (t (signal 'verify-error :message (format nil "Invalid type specifier ~S" type)))))
+    (t (signal 'verify-error :message (format nil "invalid type specifier ~S" type)))))
 
 (defun validate-spec (type)
   (and (consp type)
