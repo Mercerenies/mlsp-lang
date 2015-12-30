@@ -40,7 +40,7 @@
    (vars :accessor type-vars
          :initarg :vars
          :initform nil
-         :type list)
+         :type list) ; Alist
    (fields :accessor type-fields
            :initarg :fields
            :initform nil))) ; TODO Fields type
@@ -48,11 +48,11 @@
 (defmethod print-object ((obj basic-type) stream)
   (print-unreadable-object (obj stream :type t)
     (with-accessors ((args type-args) (parent type-parent)
-                     (name name))
+                     (name name) (vars type-vars))
         obj
-      (format stream "name=~S args=~S parent=~A"
-              name args parent))))
-
+      (format stream "name=~S args=~S parent=~A vars=~A"
+              name args parent vars))))
+#|
 (deftype type-value ()
   '(or type-spec (eql infer)))
 
@@ -86,7 +86,7 @@
            :initarg :result
            :initform nil
            :type type-tuple)))
-
+|#
 (defun make-basic-package (name)
   (make-instance 'basic-package :name name))
 

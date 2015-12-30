@@ -7,5 +7,6 @@
 (load "error.lisp")
 (load "identifier.lisp")
 (load "types.lisp")
+(load "typespec.lisp")
 (load "reader.lisp")
 (load "main.lisp")

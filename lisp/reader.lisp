@@ -20,52 +20,11 @@
       "main")
     (second package-header)))
 
-(defgeneric read-type (head body))
-
-(defmethod no-applicable-method ((mthd (eql #'read-type)) &rest args)
-  (declare (ignore args))
-  (signal 'verify-error
-          :message (format nil "unknown type specifier ~S" (first args))))
-
-(defmethod read-type ((head (eql 'tuple-type)) body)
-  (unless (>= (length body) 2)
-    (signal 'verify-error :message "invalid tuple type")
-    (return-from read-type 'infer))
-  (destructuring-bind (*source-pos* access . elems) body
-    (unless (typep access 'type-access)
-      (signal 'verify-error :message "invalid tuple access")
-      (setf access 'read))
-    (make-instance 'type-tuple
-                   :access access
-                   :elem (mapcar #'interpret-type elems))))
-
-(defmethod read-type ((head (eql 'named-type)) body)
-  (unless (>= (length body) 3)
-    (signal 'verify-error :message "invalid named type")
-    (return-from read-type 'infer))
-  (destructuring-bind (*source-pos* name access . elems) body
-    (unless (typep access 'type-access)
-      (signal 'verify-error :message "invalid named type access")
-      (setf access 'read))
-    (make-instance 'type-tuple
-                   :name name
-                   :access access
-                   :args (mapcar #'interpret-type elems))))
-
-(defmethod read-type ((head (eql 'func-type)) body)
-  (unless (= (length body) 3)
-    (signal 'verify-error :message "invalid function type")
-    (return-from read-type 'infer))
-  (destructuring-bind (*source-pos* args result) body
-    (make-instance 'type-func
-                   :args args
-                   :result result)))
-
 (defun interpret-type (expr)
   (unless (consp expr)
     (signal 'verify-error :message "expecting non-empty list")
-    (return-from interpret-type 'infer))
-  (read-type (car expr) (cdr expr)))
+    (return-from interpret-type '*))
+  (translate-spec expr))
 
 (defun interpret-fields (expr)
   (unless (null expr)
@@ -104,9 +63,21 @@
     (signal 'verify-error :message "invalid type declaration")
     (return-from read-decl nil))
   (destructuring-bind (*source-pos* name args parent vars fields) body
+    ; TODO Check for duplicate fields, etc.
     (make-instance 'basic-type
                    :name name :parent parent
-                   :args args :vars vars :fields (interpret-fields fields))))
+                   :args args
+                   :vars (read-vars vars)
+                   :fields (interpret-fields fields))))
+
+(defun read-vars (vars) ; ///// Not reading vars properly
+  (loop for var in vars
+        append (if (/= (length var) 2)
+                   (prog1 nil
+                     (signal 'verify-error
+                             :message "invalid instance var specifier"))
+                   (destructuring-bind (name type) var
+                     (list (cons name (interpret-type type)))))))
 
 (defun interpret-decl (expr)
   (unless (consp expr)
