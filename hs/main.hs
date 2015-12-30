@@ -4,6 +4,7 @@ import Lang.Lexer
 import Lang.Parser
 import Lang.Printer
 import System.Environment
+import System.IO
 
 -- TODO Command line args (System.Console.GetOpt)
 main :: IO ()
@@ -18,6 +19,6 @@ main = getArgs >>= \args -> case args of
                                                            other -> [other]
                                               return $ mapM_ printSexp exp'
                                         case result of
-                                          Left expr -> print expr
+                                          Left expr -> hPutStrLn stderr $ show expr
                                           Right act -> act
                               _ -> putStrLn "Usage: ./main <filename>"

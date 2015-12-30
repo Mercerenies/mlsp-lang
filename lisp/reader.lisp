@@ -1,8 +1,5 @@
 (in-package #:mlsp)
 
-; ///// Modify the syntax to allow type declarations to take arguments.
-;       Necessary to maximize genericism.
-
 (defparameter *packages*
   nil)
 
@@ -103,13 +100,13 @@
           finally (return *current-module*))))
 
 (defmethod read-decl ((head (eql 'type)) body)
-  (unless (= (length body) 5)
+  (unless (= (length body) 6)
     (signal 'verify-error :message "invalid type declaration")
     (return-from read-decl nil))
-  (destructuring-bind (*source-pos* name parent vars fields) body
+  (destructuring-bind (*source-pos* name args parent vars fields) body
     (make-instance 'basic-type
                    :name name :parent parent
-                   :args vars :fields (interpret-fields fields))))
+                   :args args :vars vars :fields (interpret-fields fields))))
 
 (defun interpret-decl (expr)
   (unless (consp expr)
@@ -119,6 +116,7 @@
 
 (defun read-code (stream package-name)
   (loop with hierarchy = (package-hierarchy package-name)
+        with *read-eval* = nil
         with *current-package* = (first (last hierarchy))
         with *current-module* = *current-package*
         with res = nil

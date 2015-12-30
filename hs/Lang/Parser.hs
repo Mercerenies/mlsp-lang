@@ -22,8 +22,8 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
             Function SourcePos (Maybe Type) String [String] Expr |
-            -- Name, parent, variables, fields
-            Type SourcePos String Type [(String, Type)] Fields |
+            -- Name, parent, arguments, variables, fields
+            Type SourcePos String [String] Type [(String, Type)] Fields |
             -- Name, args, variables
             Concept SourcePos String [String] Timing [(String, Type)] |
             Instance SourcePos String [Type] Type [Decl] |
@@ -154,13 +154,14 @@ typeDecl = do
   keyword "type"
   newlines
   name <- identifier
+  args <- option [] $ operator "[" *> sepBy identifier nlComma <* operator "]"
   pos0 <- getPosition
   parent <- option (Named pos0 "T" [] Read) $ operator "(" *> typeExpr <* operator ")"
   newlines1
   (types, fields) <- typeInterior
   keyword "end"
   pos <- getPosition
-  return $ Type pos name parent types fields
+  return $ Type pos name args parent types fields
 
 typeInterior :: EParser ([(String, Type)], Fields)
 typeInterior = do

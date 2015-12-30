@@ -33,8 +33,12 @@
            :initarg :parent
            :initform nil
            :type type-spec)
-   (vars :accessor type-args
+   (args :accessor type-args
          :initarg :args
+         :initform nil
+         :type list)
+   (vars :accessor type-vars
+         :initarg :vars
          :initform nil
          :type list)
    (fields :accessor type-fields
@@ -44,9 +48,10 @@
 (defmethod print-object ((obj basic-type) stream)
   (print-unreadable-object (obj stream :type t)
     (with-accessors ((args type-args) (parent type-parent)
-                     (name name) (fields type-fields))
-        (format stream "name=~A args=~A parent=~A fields=~A"
-                name args parent fields))))
+                     (name name))
+        obj
+      (format stream "name=~S args=~S parent=~A"
+              name args parent))))
 
 (deftype type-value ()
   '(or type-spec (eql infer)))
