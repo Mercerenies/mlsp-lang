@@ -37,5 +37,15 @@
        (member (second type) '(read write))
        (every validate-spec (cddr type))))
 
-(deftype type-spec ()
+(deftype type-expr ()
   '(satisfies validate-spec))
+
+(deftype type-spec ()
+  '(cons symbol type-expr))
+
+(defun read-spec (expr)
+  (unless (= (length expr) 2)
+    (signal 'verify-error :message "invalid type specification")
+    (return-from read-spec nil))
+  (destructuring-bind (name type) expr
+    (cons (intern name) (interpret-type type))))

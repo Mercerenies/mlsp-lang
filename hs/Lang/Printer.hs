@@ -1,6 +1,10 @@
 module Lang.Printer(Output(..), SExpr(..), Lispable(..),
                     showSexp, printSexp, output) where
 
+-- TODO Alter the syntax slightly to allow default implementations in
+--      concepts (possibly with some way to specify what must be implemented
+--      to avoid mutual infinite recursion like in Haskell typeclasses)
+
 import Data.Map(toList)
 import Lang.Parser
 import qualified Lang.Tokens as Tok

@@ -1,5 +1,7 @@
 (in-package #:mlsp)
 
+; ///// Concepts, instances, functions
+
 (defclass named ()
   ((name :accessor name
          :initarg :name
@@ -26,6 +28,10 @@
             (name obj) (module-decl obj))))
 
 ; Object should be named
+; Note that as a special case (for convenience), if the object
+; is nil, this function will do nothing. Thus, it is safe to
+; pass on a return value from a function that returns nil on
+; failure to this function.
 (defun put-object-in-module (obj module)
   (check-type obj named "a named object")
   (if (gethash (name obj) (module-decl module))
@@ -39,7 +45,7 @@
   ((parent :accessor type-parent
            :initarg :parent
            :initform nil
-           :type type-spec)
+           :type type-expr)
    (args :accessor type-args
          :initarg :args
          :initform nil
@@ -59,6 +65,28 @@
         obj
       (format stream "name=~S args=~S parent=~S vars=~S"
               name args parent vars))))
+
+(defclass basic-concept (named)
+  ((parent :accessor concept-parent
+           :initarg :parent
+           :initform nil
+           :type type-expr) ; Will reference a concept but is syntactically a type expr
+   (args :accessor concept-args
+         :initarg :args
+         :initform nil
+         :type list)
+   (body :accessor concept-body
+         :initarg :body
+         :initform nil
+         :type list))) ; Alist
+
+(defmethod print-object ((obj basic-concept) stream)
+  (print-unreadable-object (obj stream :type t)
+    (with-accessors ((args concept-args) (parent concept-parent)
+                     (name name) (body concept-body))
+        obj
+      (format stream "name=~S args=~S parent=~S body=~S"
+              name args parent body))))
 
 (defun make-basic-package (name)
   (make-instance 'basic-package :name name))

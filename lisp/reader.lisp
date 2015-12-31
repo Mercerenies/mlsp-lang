@@ -71,14 +71,22 @@
                    :vars (read-vars vars)
                    :fields (interpret-fields fields))))
 
+(defmethod read-decl ((head (eql 'concept)) body)
+  (unless (>= (length body) 4)
+    (signal 'verify-error :message "invalid concept declaration")
+    (return-from read-decl nil))
+  (destructuring-bind (*source-pos* name args timing . vars) body
+    (make-instance 'basic-concept
+                   :name (intern name)
+                   :parent nil ; TODO Parent syntax
+                   :args (mapcar #'intern args)
+                   :body (read-vars vars))))
+
 (defun read-vars (vars)
   (loop for var in vars
-        append (if (/= (length var) 2)
-                   (prog1 nil
-                     (signal 'verify-error
-                             :message "invalid instance var specifier"))
-                   (destructuring-bind (name type) var
-                     (list (cons (intern name) (interpret-type type)))))))
+        for result = (read-spec var)
+        when result
+            collect result))
 
 (defun interpret-decl (expr)
   (unless (consp expr)
