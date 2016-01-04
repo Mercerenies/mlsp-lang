@@ -48,7 +48,6 @@ instance Lispable Decl where
     -- (concept pos name (&rest args) timing &rest vars)
     --   ; where vars is a list of (name type)
     -- (instance pos name (&rest args) impl &rest vars)
-    -- (var pos name (&optional type) body)
     lispify (Include pos name hiding) =
         List $ [Symbol "include", lispify pos, Atom name, List $ map Atom hiding]
     lispify (Import pos name hiding) =
@@ -71,9 +70,6 @@ instance Lispable Decl where
         List $ [Symbol "instance", lispify pos, Atom name,
                 List $ map lispify args, lispify impl]
                  ++ map lispify vars
-    lispify (Variable pos type_ name val) =
-        List $ [Symbol "var", lispify pos,  Atom name,
-                List (maybe [] (\x -> [lispify x]) type_), lispify val]
 
 instance Lispable Type where
     -- (tuple-type pos acc &rest types)
@@ -108,7 +104,8 @@ instance Lispable Expr where
     -- (unless pos cond true &optional false)
     -- (for pos type expr body) ; where type is = or <-
     -- (case pos expr &rest clauses) ; where clauses are (pattern (&optional guard) body)
-    -- (cond pos (&rest rest) &optional else) ; where rest is (expr0 expr1x)
+    -- (cond pos (&rest rest) &optional else) ; where rest is (expr0 expr1)
+    -- (let pos (&rest rest) expr) ; where rest is (ptn expr)
     lispify (FunctionCall pos expr args) =
         List $ [Symbol "call", lispify pos, lispify expr] ++ map lispify args
     lispify (DotCall pos expr string args) =
@@ -151,6 +148,9 @@ instance Lispable Expr where
                   elseClause = case else_ of
                                  Just x -> [lispify x]
                                  Nothing -> []
+    lispify (LetStmt pos clauses expr) =
+        List $ [Symbol "let", lispify pos, List $ map singleExpr clauses, lispify expr]
+             where singleExpr (var, val) = List [lispify var, lispify val]
 
 instance Lispable Tok.Token where
     -- (literal type &rest contents)

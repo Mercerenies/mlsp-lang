@@ -26,8 +26,7 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Type SourcePos String [String] Type [(String, Type)] Fields |
             -- Name, args, variables
             Concept SourcePos String [String] Timing [(String, Type)] |
-            Instance SourcePos String [Type] Type [Decl] |
-            Variable SourcePos (Maybe Type) String Expr
+            Instance SourcePos String [Type] Type [Decl]
             deriving (Show, Eq)
 
 data Type = Tuple SourcePos [Type] Access |
@@ -49,7 +48,8 @@ data Expr = FunctionCall SourcePos Expr [Expr] |
             IfStmt SourcePos IfOp Conditional Expr (Maybe Expr) |
             ForStmt SourcePos ForOp Pattern Expr Expr |
             Case SourcePos Expr [(Pattern, Maybe Expr, Expr)] |
-            Cond SourcePos [(Conditional, Expr)] (Maybe Expr)
+            Cond SourcePos [(Conditional, Expr)] (Maybe Expr) |
+            LetStmt SourcePos [(Pattern, Expr)] Expr
             deriving (Show, Eq)
 
 data Pattern = TuplePattern SourcePos [Pattern] |
@@ -320,9 +320,8 @@ basicExpr = Oper <$> getPosition <*> operatorExpr basicTerm <?> "basic expressio
 
 basicTerm :: EParser Expr
 basicTerm = beginEndExpr <|> ifExpr <|> forExpr <|> caseExpr <|> condExpr <|>
-            parenExpr <|> try varAsn <|> literalExpr <|> tupleExpr <|> listExpr <|>
-            try (Declare <$> getPosition <*> varDecl) <|>
-            try (Declare <$> getPosition <*> functionDecl) <|> try callExpr
+            letExpr <|> parenExpr <|> try varAsn <|> literalExpr <|> tupleExpr <|>
+            listExpr <|> try (Declare <$> getPosition <*> functionDecl) <|> try callExpr
 
 beginEndExpr :: EParser Expr
 beginEndExpr = do
@@ -434,6 +433,26 @@ condExpr = do
                      toplevelExpr
           multiLine = Block <$> getPosition <*> many (try $ newlines1 *> statement)
 
+letExpr :: EParser Expr
+letExpr = do
+  keyword "let"
+  newlines
+  -- TODO Optimize out this 'try' without exploding everything
+  clauses <- (:) <$> clause <*> many (try $ newlines1 *> clause)
+  newlines
+  keyword "in"
+  newlines
+  expr <- toplevelExpr
+  pos <- getPosition
+  return $ LetStmt pos clauses expr
+    where clause = do
+            ident <- pattern
+            newlines
+            operator "="
+            newlines
+            expr <- statement
+            return (ident, expr)
+
 parenExpr :: EParser Expr
 parenExpr = operator "(" *> newlines *>
             statement
@@ -475,24 +494,6 @@ listExpr = do
   operator "]"
   pos <- getPosition
   return $ ListExpr pos contents
-
-varDecl :: EParser Decl
-varDecl = do
-  type_ <- option Nothing $ try (Just <$> typeSpec <* newlines1)
-  keyword "var"
-  newlines
-  name <- identifier <?> "variable name"
-  type' <- case type_ of
-             Nothing -> return Nothing
-             Just (str, expr)
-                 | str == name -> return $ Just expr
-                 | otherwise -> fail "preceding type declaration should match function"
-  newlines
-  operator "="
-  newlines
-  stmt <- statement
-  pos <- getPosition
-  return $ Variable pos type' name stmt
 
 varAsn :: EParser Expr
 varAsn = do
@@ -647,8 +648,9 @@ idPattern = IdPattern <$> getPosition <*> identifier
 accessSuffix :: EParser Access
 accessSuffix = option Read $ ReadWrite <$ operator "!"
 
+-- TODO Think about whether this change is okay
 nlComma :: EParser ()
-nlComma = void $ newlines *> operator "," <* newlines
+nlComma = void $ operator "," <* newlines
 
 dottedIdentifier :: EParser String
 dottedIdentifier = do
