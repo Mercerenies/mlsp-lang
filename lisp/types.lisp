@@ -27,6 +27,7 @@
     (format stream "~S ~S"
             (name obj) (module-decl obj))))
 
+; ///// Instances and concepts cannot coexist due to the name constraint at the moment
 ; Object should be named
 ; Note that as a special case (for convenience), if the object
 ; is nil, this function will do nothing. Thus, it is safe to
@@ -35,7 +36,7 @@
 (defun put-object-in-module (obj module)
   (check-type obj named "a named object")
   (if (gethash (name obj) (module-decl module))
-      (signal 'name-error :message "name conflict on ~S" name)
+      (signal 'name-error :message (format nil "name conflict on ~S" (name obj)))
       (setf (gethash (name obj) (module-decl module)) obj)))
 
 (defclass basic-func (named)
@@ -75,18 +76,48 @@
          :initarg :args
          :initform nil
          :type list)
+   (timing :accessor concept-timing
+           :initarg :timing
+           :initform 'static
+           :type symbol)
    (body :accessor concept-body
          :initarg :body
          :initform nil
          :type list))) ; Alist
 
+; TODO Work on pretty printing if possible
 (defmethod print-object ((obj basic-concept) stream)
   (print-unreadable-object (obj stream :type t)
     (with-accessors ((args concept-args) (parent concept-parent)
-                     (name name) (body concept-body))
+                     (name name) (timing concept-timing) (body concept-body))
         obj
-      (format stream "name=~S args=~S parent=~S body=~S"
-              name args parent body))))
+      (format stream "name=~S args=~S parent=~S timing=~S body=~S"
+              name args parent timing body))))
+
+(defclass basic-instance (named)
+  ((parent :accessor inst-parent
+           :initarg :parent
+           :initform nil
+           :type list)
+   (impl :accessor inst-impl
+         :initarg :impl
+         :initform nil)
+   (args :accessor inst-args
+         :initarg :args
+         :initform nil
+         :type list)
+   (body :accessor inst-body
+         :initarg :body
+         :initform nil
+         :type list))) ; Alist
+
+(defmethod print-object ((obj basic-instance) stream)
+  (print-unreadable-object (obj stream :type t)
+    (with-accessors ((args inst-args) (parent inst-parent)
+                     (name name) (impl inst-impl) (body inst-body))
+        obj
+      (format stream "name=~S args=~S impl=~S parent=~S body=~S"
+              name args impl parent body))))
 
 (defun make-basic-package (name)
   (make-instance 'basic-package :name name))

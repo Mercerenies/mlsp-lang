@@ -80,7 +80,20 @@
                    :name (intern name)
                    :parent nil ; TODO Parent syntax
                    :args (mapcar #'intern args)
+                   :timing timing
                    :body (read-vars vars))))
+
+(defmethod read-decl ((head (eql 'instance)) body)
+  (unless (>= (length body) 4)
+    (signal 'verify-error :message "invalid instance declaration")
+    (return-from read-decl nil))
+  (destructuring-bind (*source-pos* name args impl . vars) body
+    (make-instance 'basic-instance
+                   :name (intern name)
+                   :parent nil ; TODO Parent syntax
+                   :args (mapcar #'intern args)
+                   :impl impl
+                   :body (mapcar #'interpret-decl vars))))
 
 (defun read-vars (vars)
   (loop for var in vars
