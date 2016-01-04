@@ -89,7 +89,8 @@
     (return-from read-decl nil))
   (destructuring-bind (*source-pos* name args impl . vars) body
     (make-instance 'basic-instance
-                   :name (intern name)
+                   :name (gensym) ; TODO Is this the best approach to this?
+                   :ref (intern name)
                    :parent nil ; TODO Parent syntax
                    :args (mapcar #'intern args)
                    :impl impl

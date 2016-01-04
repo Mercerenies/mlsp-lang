@@ -27,7 +27,6 @@
     (format stream "~S ~S"
             (name obj) (module-decl obj))))
 
-; ///// Instances and concepts cannot coexist due to the name constraint at the moment
 ; Object should be named
 ; Note that as a special case (for convenience), if the object
 ; is nil, this function will do nothing. Thus, it is safe to
@@ -99,6 +98,9 @@
            :initarg :parent
            :initform nil
            :type list)
+   (ref :accessor inst-concept
+        :initarg :ref
+        :initform nil)
    (impl :accessor inst-impl
          :initarg :impl
          :initform nil)
@@ -114,10 +116,11 @@
 (defmethod print-object ((obj basic-instance) stream)
   (print-unreadable-object (obj stream :type t)
     (with-accessors ((args inst-args) (parent inst-parent)
-                     (name name) (impl inst-impl) (body inst-body))
+                     (name name) (impl inst-impl) (body inst-body)
+                     (ref inst-concept))
         obj
-      (format stream "name=~S args=~S impl=~S parent=~S body=~S"
-              name args impl parent body))))
+      (format stream "name=~S args=~S ref=~S impl=~S parent=~S body=~S"
+              name args ref impl parent body))))
 
 (defun make-basic-package (name)
   (make-instance 'basic-package :name name))
