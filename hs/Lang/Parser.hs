@@ -49,7 +49,8 @@ data Expr = FunctionCall SourcePos Expr [Expr] |
             ForStmt SourcePos ForOp Pattern Expr Expr |
             Case SourcePos Expr [(Pattern, Maybe Expr, Expr)] |
             Cond SourcePos [(Conditional, Expr)] (Maybe Expr) |
-            LetStmt SourcePos [(Pattern, Expr)] Expr
+            LetStmt SourcePos [(Pattern, Expr)] Expr |
+            Lambda SourcePos [String] Expr
             deriving (Show, Eq)
 
 data Pattern = TuplePattern SourcePos [Pattern] |
@@ -320,8 +321,9 @@ basicExpr = Oper <$> getPosition <*> operatorExpr basicTerm <?> "basic expressio
 
 basicTerm :: EParser Expr
 basicTerm = beginEndExpr <|> ifExpr <|> forExpr <|> caseExpr <|> condExpr <|>
-            letExpr <|> parenExpr <|> try varAsn <|> literalExpr <|> tupleExpr <|>
-            listExpr <|> try (Declare <$> getPosition <*> functionDecl) <|> try callExpr
+            letExpr <|> lambdaExpr <|> parenExpr <|> try varAsn <|>
+            literalExpr <|> tupleExpr <|> listExpr <|>
+            try (Declare <$> getPosition <*> functionDecl) <|> try callExpr
 
 beginEndExpr :: EParser Expr
 beginEndExpr = do
@@ -452,6 +454,24 @@ letExpr = do
             newlines
             expr <- statement
             return (ident, expr)
+
+-- TODO Lambdas and function declarations should be able to pattern match their
+--      arguments.
+lambdaExpr :: EParser Expr
+lambdaExpr = do
+  operator "->"
+  newlines
+  args <- option [] $ do
+               operator "("
+               newlines
+               args' <- sepBy identifier nlComma
+               newlines
+               operator ")"
+               return args'
+  newlines
+  expr <- toplevelExpr
+  pos <- getPosition
+  return $ Lambda pos args expr
 
 parenExpr :: EParser Expr
 parenExpr = operator "(" *> newlines *>

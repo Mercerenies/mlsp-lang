@@ -1,6 +1,8 @@
 (in-package #:mlsp)
 
 ; ///// Concepts, instances, functions
+; ///// Concepts need to introduce their functions into the current scope
+;       in addition to themselves
 
 (defclass named ()
   ((name :accessor name

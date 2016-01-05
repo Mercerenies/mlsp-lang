@@ -106,6 +106,7 @@ instance Lispable Expr where
     -- (case pos expr &rest clauses) ; where clauses are (pattern (&optional guard) body)
     -- (cond pos (&rest rest) &optional else) ; where rest is (expr0 expr1)
     -- (let pos (&rest rest) expr) ; where rest is (ptn expr)
+    -- (lambda pos (&rest args) expr)
     lispify (FunctionCall pos expr args) =
         List $ [Symbol "call", lispify pos, lispify expr] ++ map lispify args
     lispify (DotCall pos expr string args) =
@@ -151,6 +152,8 @@ instance Lispable Expr where
     lispify (LetStmt pos clauses expr) =
         List $ [Symbol "let", lispify pos, List $ map singleExpr clauses, lispify expr]
              where singleExpr (var, val) = List [lispify var, lispify val]
+    lispify (Lambda pos args expr) =
+        List $ [Symbol "lambda", lispify pos, List $ map Atom args, lispify expr]
 
 instance Lispable Tok.Token where
     -- (literal type &rest contents)
