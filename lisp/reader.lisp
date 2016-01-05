@@ -55,7 +55,7 @@
           for decl in decls
           for res = (interpret-decl decl)
           when res
-              do (put-object-in-module res *current-module*)
+              do (put-objects-in-module res *current-module*)
           finally (return *current-module*))))
 
 (defmethod read-decl ((head (eql 'type)) body)
@@ -76,12 +76,19 @@
     (signal 'verify-error :message "invalid concept declaration")
     (return-from read-decl nil))
   (destructuring-bind (*source-pos* name args timing . vars) body
-    (make-instance 'basic-concept
-                   :name (intern name)
-                   :parent nil ; TODO Parent syntax
-                   :args (mapcar #'intern args)
-                   :timing timing
-                   :body (read-vars vars))))
+    (let* ((inner (read-vars vars))
+           (conc (make-instance 'basic-concept
+                                :name (intern name)
+                                :parent nil ; TODO Parent syntax
+                                :args (mapcar #'intern args)
+                                :timing timing
+                                :body inner)))
+      (maplist (lambda (x) (setf (cdar x)
+                                 (make-instance 'concept-func
+                                                :name (caar x)
+                                                :concept conc)))
+               inner)
+      (append (mapcar #'cdr inner) (list conc)))))
 
 (defmethod read-decl ((head (eql 'instance)) body)
   (unless (>= (length body) 4)
@@ -119,7 +126,7 @@
         while expr
         do (setf res (interpret-decl expr))
         when res
-            do (put-object-in-module res *current-module*)
+            do (put-objects-in-module res *current-module*)
         finally (return (first (last hierarchy)))))
 
 (defun read-code-file (filename)

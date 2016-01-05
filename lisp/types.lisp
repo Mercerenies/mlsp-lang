@@ -41,8 +41,24 @@
         (signal 'name-error :message (format nil "name conflict on ~S" (name obj)))
         (setf (gethash (name obj) (module-decl module)) obj))))
 
+(defun put-objects-in-module (obj module)
+  "Places the named object or list of named objects into the module or package given."
+  (loop for elem in (if (listp obj) obj (list obj))
+        do (put-object-in-module elem module)))
+
 (defclass basic-func (named)
   ())
+
+(defclass concept-func (named)
+  ((owner :accessor func-concept
+          :initarg :concept
+          :initform nil
+          :type basic-concept)))
+
+(defmethod print-object ((obj concept-func) stream)
+  (print-unreadable-object (obj stream :type t)
+    (format stream "name=~S concept=~S"
+            (name obj) (func-concept obj))))
 
 (defclass basic-type (named)
   ((parent :accessor type-parent
