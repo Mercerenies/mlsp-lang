@@ -21,7 +21,7 @@ postfix :: Op -> EParser b -> Operator [Lexeme] () Identity (OpExpr a)
 postfix op lex = Postfix $ flip Post op <$ lex
 
 binary :: Assoc -> Op -> EParser b -> Operator [Lexeme] () Identity (OpExpr a)
-binary assoc op lex = flip Infix assoc $ (\x y -> Inf x op y) <$ lex
+binary assoc op lex = flip Infix assoc $ (\x y -> Inf x op y) <$ lex <* newlines
 
 operatorTable :: OperatorTable [Lexeme] () Identity (OpExpr a)
 operatorTable = [
