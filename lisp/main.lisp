@@ -1,6 +1,8 @@
 (in-package #:mlsp)
 
 (defun initial-read (filename)
+  "Performs the initial read to establish the Common Lisp data structures from the
+   raw S-expressions provided in the file."
   (let ((errors nil)
         (warnings nil)
         (*print-escape* nil)
