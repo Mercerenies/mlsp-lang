@@ -29,6 +29,7 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Instance SourcePos String [Type] Type [Decl]
             deriving (Show, Eq)
 
+-- ///// Is / Has operators
 data Type = Tuple SourcePos [Type] Access |
             Named SourcePos String [Type] Access |
             Func SourcePos [Type] Type

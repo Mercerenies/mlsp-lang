@@ -2,8 +2,10 @@
 
 ; ///// Have a TODO list, future Silvio:
 ; - Documentation for the rest of the files
-; - Concepts need to introduce their functions into the current scope
 ; - Function declarations themselves (by extension, expressions)
+; - All of the declarations (and everything else, for that matter) need to
+;   remember their source position. Do this with a parent class whose :initform
+;   is *source-pos*
 
 (defclass named ()
   ((name :accessor name
