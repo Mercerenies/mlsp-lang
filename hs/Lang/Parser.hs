@@ -15,6 +15,8 @@ import Text.Parsec.Error(ParseError)
 import Text.Parsec.Pos(SourcePos)
 import Control.Monad
 
+-- ///// TODO 'def' syntax for functions rather than the current approach
+
 data FileData = FileData String [Decl] -- Package, declarations
                 deriving (Show, Eq)
 
@@ -22,8 +24,10 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
             Function SourcePos (Maybe Type) String [String] Expr |
-            -- Name, parent, arguments, variables, fields
+            -- Name, parent, arguments, variables, fields (TODO Remove 'type')
             Type SourcePos String [String] Type [(String, Type)] Fields |
+            -- Name, arguments, parents, variables, methods
+            Class SourcePos String [String] [Type] [(String, Type)] [Decl] |
             -- Name, args, variables
             Concept SourcePos String [String] Timing [(String, Type)] |
             Instance SourcePos String [Type] Type [Decl]
@@ -104,7 +108,8 @@ file = do
 
 toplevel :: EParser Decl
 toplevel = moduleDecl <|> functionDecl <|> typeDecl <|>
-           conceptDecl <|> instanceDecl <|> importInclude
+           conceptDecl <|> instanceDecl <|> importInclude <|>
+           classDecl
 
 importInclude :: EParser Decl
 importInclude = do
@@ -166,6 +171,36 @@ typeDecl = do
   keyword "end"
   pos <- getPosition
   return $ Type pos name args parent types fields
+
+classDecl :: EParser Decl
+classDecl = do
+  keyword "class"
+  newlines
+  name <- identifier
+  args <- option [] $ operator "[" *> sepBy identifier nlComma <* operator "]"
+  pos0 <- getPosition
+  parent <- option [Named pos0 "T" [] Read] $ do
+              operator "("
+              newlines
+              parents <- sepBy typeExpr nlComma
+              newlines
+              operator ")"
+              return parents
+  newlines1
+  fields <- classFields
+  methods <- classMethods
+  keyword "end"
+  pos <- getPosition
+  return $ Class pos name args parent fields methods
+      where classFields = many . try $ do
+                            -- TODO The try is temporary until we move to 'def's
+                            name <- identifier
+                            operator "::"
+                            newlines
+                            type_ <- typeExpr
+                            newlines1
+                            return (name, type_)
+            classMethods = many $ functionDecl <* newlines1
 
 typeInterior :: EParser ([(String, Type)], Fields)
 typeInterior = do
@@ -326,9 +361,9 @@ basicExpr = Oper <$> getPosition <*> operatorExpr basicTerm <?> "basic expressio
 
 basicTerm :: EParser Expr
 basicTerm = beginEndExpr <|> ifExpr <|> forExpr <|> caseExpr <|> condExpr <|>
-            letExpr <|> lambdaExpr <|> parenExpr <|> try varAsn <|>
+            letExpr <|> lambdaExpr <|> try varAsn <|>
             literalExpr <|> listExpr <|> try tupleExpr <|>
-            try (Declare <$> getPosition <*> functionDecl) <|> try callExpr
+            parenExpr <|> try (Declare <$> getPosition <*> functionDecl) <|> try callExpr
 
 beginEndExpr :: EParser Expr
 beginEndExpr = do

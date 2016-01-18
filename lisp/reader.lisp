@@ -46,6 +46,8 @@
   (signal 'unsupported-warning
           :message "importing is not yet implemented")) ; TODO Import statements
 
+; TODO Class declarations
+
 (defmethod read-decl ((head (eql 'module)) body)
   (unless (>= (length body) 2)
     (signal 'verify-error :message "invalid module header")
