@@ -30,6 +30,8 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             deriving (Show, Eq)
 
 -- ///// Is / Has operators
+--       Think about how to handle this; I'm not sure I like this approach with
+--       inheritance shoehorned in
 data Type = Tuple SourcePos [Type] Access |
             Named SourcePos String [Type] Access |
             Func SourcePos [Type] Type
@@ -196,15 +198,17 @@ typeSpec = do
   return (name, tpe)
 
 typeExpr :: EParser Type
-typeExpr = tupleTypeExpr <|> try funcTypeExpr <|> namedTypeExpr <?> "type expression"
+typeExpr = try funcTypeExpr <|> try tupleTypeExpr <|> namedTypeExpr <?> "type expression"
 
 tupleTypeExpr :: EParser Type
 tupleTypeExpr = do
-  operator "{"
+  operator "("
   newlines
   contents <- sepBy typeExpr nlComma
   newlines
-  operator "}"
+  operator ")"
+  when (length contents == 1) $
+       fail "tuple of length 1"
   access <- accessSuffix
   pos <- getPosition
   return $ Tuple pos contents access
@@ -323,7 +327,7 @@ basicExpr = Oper <$> getPosition <*> operatorExpr basicTerm <?> "basic expressio
 basicTerm :: EParser Expr
 basicTerm = beginEndExpr <|> ifExpr <|> forExpr <|> caseExpr <|> condExpr <|>
             letExpr <|> lambdaExpr <|> parenExpr <|> try varAsn <|>
-            literalExpr <|> tupleExpr <|> listExpr <|>
+            literalExpr <|> listExpr <|> try tupleExpr <|>
             try (Declare <$> getPosition <*> functionDecl) <|> try callExpr
 
 beginEndExpr :: EParser Expr
@@ -498,11 +502,13 @@ literalExpr = do
 
 tupleExpr :: EParser Expr
 tupleExpr = do
-  operator "{"
+  operator "("
   newlines
   contents <- sepBy basicExpr nlComma
   newlines
-  operator "}"
+  operator ")"
+  when (length contents == 1) $
+       fail "tuple of length 1"
   pos <- getPosition
   return $ TupleExpr pos contents
 
@@ -619,14 +625,21 @@ condit = try bindExpr <|> CondExpr <$> toplevelExpr
             return $ BindExpr lhs expr
 
 pattern :: EParser Pattern
-pattern = tuplePattern <|> listPattern <|> exprPattern <|>
+pattern = try tuplePattern <|> listPattern <|> exprPattern <|>
           UnderscorePattern <$> (matchToken (Identifier "_") *> getPosition) <|>
           try typePattern <|> idPattern <?> "pattern"
 
 tuplePattern :: EParser Pattern
-tuplePattern = operator "{" *> newlines *>
-               (TuplePattern <$> getPosition <*> sepBy pattern nlComma)
-               <* newlines <* operator "}"
+tuplePattern = do
+  operator "("
+  newlines
+  contents <- sepBy pattern nlComma
+  newlines
+  operator ")"
+  when (length contents == 1) $
+       fail "tuple of length 1"
+  pos <- getPosition
+  return $ TuplePattern pos contents
 
 listPattern :: EParser Pattern
 listPattern = do
@@ -669,7 +682,6 @@ idPattern = IdPattern <$> getPosition <*> identifier
 accessSuffix :: EParser Access
 accessSuffix = option Read $ ReadWrite <$ operator "!"
 
--- TODO Think about whether this change is okay
 nlComma :: EParser ()
 nlComma = void $ operator "," <* newlines
 
