@@ -18,6 +18,9 @@ data FileData = FileData String [Decl] -- Package, declarations
 
 type FunctionBody = [([Pattern], Expr)]
 
+-- TODO Do something useful with modules to make them more than just namespaces
+
+-- TODO Classes which have a finite and specified number of children
 data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
@@ -30,6 +33,11 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Instance SourcePos String [Type] Type [Decl]
             deriving (Show, Eq)
 
+-- ///// Unions and intersections and how they'll work with concepts and instances
+
+-- TODO Change the function type syntax so that it parses as a tuple argument and
+--      desugars:
+--        (a, b) -> c ## A function of one argument which is a tuple
 data Type = Tuple SourcePos [Type] Access |
             Named SourcePos String [Type] Access |
             Func SourcePos [Type] Type
@@ -699,7 +707,7 @@ exprPattern = ExprPattern <$> getPosition <*> (operator "^" *> newlines *> tople
 
 typePattern :: EParser Pattern
 typePattern = do
-  operator "&"
+  operator "&" -- TODO Find a way (without 'try's everywhere) to remove this ampersand
   newlines
   name <- identifier
   newlines
