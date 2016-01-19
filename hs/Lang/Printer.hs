@@ -42,7 +42,8 @@ instance Lispable Decl where
     -- (include pos name (&rest hiding))
     -- (import pos name (&rest hiding))
     -- (module pos name &body rest)
-    -- (function pos name (&rest args) (&optional type) body)
+    -- (function pos name (&optional type) &rest cases)
+    --   ; where cases is a list of ((&rest pattern) stmt)
     -- (type pos name (&rest args) parent (&rest vars) fields)
     --   ; where vars is a list of (name type)
     -- (concept pos name (&rest args) timing &rest vars)
@@ -56,9 +57,13 @@ instance Lispable Decl where
         List $ [Symbol "import", lispify pos, Atom name, List $ map Atom hiding]
     lispify (Module pos name internals) =
         List $ [Symbol "module", lispify pos, Atom name] ++ map lispify internals
-    lispify (Function pos type_ name args impl) =
-        List $ [Symbol "function", lispify pos, Atom name, List $ map Atom args,
-                List (maybe [] (\x -> [lispify x]) type_), lispify impl]
+    lispify (Function pos type_ name insides) =
+        List $ [Symbol "function", lispify pos, Atom name, optionalType]
+               ++ map translateInside insides
+        where optionalType = case type_ of
+                               Just x -> List [lispify x]
+                               Nothing -> List []
+              translateInside (ptn, stmt) = List [List $ map lispify ptn, lispify stmt]
     lispify (Type pos name args parent vars fields) =
         List $ [Symbol "type", lispify pos, Atom name, List $ map Atom args,
                 lispify parent, List $ map lispify' vars, lispify fields]

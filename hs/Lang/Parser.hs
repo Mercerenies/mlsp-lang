@@ -23,7 +23,7 @@ data FileData = FileData String [Decl] -- Package, declarations
 data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
-            Function SourcePos (Maybe Type) String [String] Expr |
+            Function SourcePos (Maybe Type) String [([Pattern], Expr)] |
             -- Name, parent, arguments, variables, fields (TODO Remove 'type')
             Type SourcePos String [String] Type [(String, Type)] Fields |
             -- Name, arguments, parents, variables, methods
@@ -140,6 +140,45 @@ moduleDecl = do
 
 functionDecl :: EParser Decl
 functionDecl = do
+  keyword "def"
+  newlines
+  name <- identifier
+  newlines
+  operator "("
+  newlines
+  args <- sepBy pattern nlComma
+  newlines
+  operator ")"
+  type_ <- optionMaybe $ operator "::" *> newlines *> typeExpr
+  contents <- Left <$> shortForm <|> Right <$> longForm
+  pos <- getPosition
+  case contents of
+    Left stmt -> return $ Function pos type_ name [(args, stmt)]
+    Right insides ->
+        let getIdPattern (IdPattern _ x) = Just x
+            getIdPattern _ = Nothing
+            args' = mapM getIdPattern args
+        in case args' of
+             Just args''
+                 | null insides -> fail "empty function declaration"
+                 | length args'' /= length (fst $ head insides) ->
+                     fail "incompatible arglist in function declaration"
+                 | otherwise -> return $ Function pos type_ name insides
+   where shortForm = operator "=" *> newlines *> statement
+         longForm = newlines1 *> many (singleForm <* newlines1) <* keyword "end"
+         singleForm = do
+                  operator "("
+                  newlines
+                  args <- sepBy pattern nlComma
+                  newlines
+                  operator ")"
+                  operator "->"
+                  stmt <- statement
+                  return (args, stmt)
+
+{-
+functionDecl :: EParser Decl
+functionDecl = do
   type_ <- option Nothing $ try (Just <$> typeSpec <* newlines1)
   name <- identifier
   type' <- case type_ of
@@ -157,6 +196,7 @@ functionDecl = do
   stmt <- statement
   pos <- getPosition
   return $ Function pos type' name args stmt
+-}
 
 typeDecl :: EParser Decl
 typeDecl = do
@@ -192,8 +232,7 @@ classDecl = do
   keyword "end"
   pos <- getPosition
   return $ Class pos name args parent fields methods
-      where classFields = many . try $ do
-                            -- TODO The try is temporary until we move to 'def's
+      where classFields = many $ do
                             name <- identifier
                             operator "::"
                             newlines
@@ -559,7 +598,7 @@ listExpr = do
 
 varAsn :: EParser Expr
 varAsn = do
-  name <- Left <$> try pattern <|> Right <$> callExpr
+  name <- Right <$> callExpr <|> Left <$> try pattern
   op <- operator "=" <|> operator "+=" <|> operator "-=" <|>
         operator "*=" <|> operator "/=" <|> operator "&&=" <|>
         operator "||="
