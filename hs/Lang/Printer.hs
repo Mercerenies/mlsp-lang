@@ -110,7 +110,9 @@ instance Lispable Expr where
     -- (for pos type expr body) ; where type is = or <-
     -- (case pos expr &rest clauses) ; where clauses are (pattern (&optional guard) body)
     -- (cond pos (&rest rest) &optional else) ; where rest is (expr0 expr1)
-    -- (let pos (&rest rest) expr) ; where rest is (ptn expr)
+    -- (let pos (&rest vars) (&rest funcs) expr)
+    --   ; where vars are (ptn expr), funcs are (name (&optional type) &rest impl), and
+    --   ;       impl are ((&rest ptn) stmt)
     -- (lambda pos (&rest args) expr)
     lispify (FunctionCall pos expr args) =
         List $ [Symbol "call", lispify pos, lispify expr] ++ map lispify args
@@ -154,9 +156,15 @@ instance Lispable Expr where
                   elseClause = case else_ of
                                  Just x -> [lispify x]
                                  Nothing -> []
-    lispify (LetStmt pos clauses expr) =
-        List $ [Symbol "let", lispify pos, List $ map singleExpr clauses, lispify expr]
+    lispify (LetStmt pos vars funcs expr) =
+        List $ [Symbol "let", lispify pos, List $ map singleExpr vars,
+                List $ map funcExpr funcs, lispify expr]
              where singleExpr (var, val) = List [lispify var, lispify val]
+                   funcExpr (name, type_, impl) =
+                       List $ [Atom name, maybeType type_] ++ map doImpl impl
+                   maybeType (Just x) = List [lispify x]
+                   maybeType Nothing = List []
+                   doImpl (ptns, expr) = List [List $ map lispify ptns, lispify expr]
     lispify (Lambda pos args expr) =
         List $ [Symbol "lambda", lispify pos, List $ map Atom args, lispify expr]
 

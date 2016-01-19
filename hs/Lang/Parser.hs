@@ -6,6 +6,7 @@ module Lang.Parser(FileData(..), Decl(..), Type(..), Expr(..),
 import Lang.Tokens
 import Lang.Operator
 import Data.List(intercalate)
+import Data.Either(partitionEithers)
 import Text.Parsec.Prim
 import Text.Parsec.Combinator
 import Text.Parsec.Error(ParseError)
@@ -15,10 +16,12 @@ import Control.Monad
 data FileData = FileData String [Decl] -- Package, declarations
                 deriving (Show, Eq)
 
+type FunctionBody = [([Pattern], Expr)]
+
 data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
-            Function SourcePos (Maybe Type) String [([Pattern], Expr)] |
+            Function SourcePos (Maybe Type) String FunctionBody |
             Type SourcePos String [String] Type |
             -- Name, arguments, parents, variables, methods
             Class SourcePos String [String] [Type] [(String, Type)] [Decl] |
@@ -47,7 +50,8 @@ data Expr = FunctionCall SourcePos Expr [Expr] |
             ForStmt SourcePos ForOp Pattern Expr Expr |
             Case SourcePos Expr [(Pattern, Maybe Expr, Expr)] |
             Cond SourcePos [(Conditional, Expr)] (Maybe Expr) |
-            LetStmt SourcePos [(Pattern, Expr)] Expr |
+            -- Vars, Funcs, Expr
+            LetStmt SourcePos [(Pattern, Expr)] [(String, Maybe Type, FunctionBody)] Expr |
             Lambda SourcePos [String] Expr
             deriving (Show, Eq)
 
@@ -126,15 +130,18 @@ functionDecl :: EParser Decl
 functionDecl = do
   keyword "def"
   newlines
+  functionDecl'
+
+functionDecl' :: EParser Decl
+functionDecl' = do
   name <- identifier
-  newlines
   operator "("
   newlines
   args <- sepBy pattern nlComma
   newlines
   operator ")"
   type_ <- optionMaybe $ operator "::" *> newlines *> typeExpr
-  contents <- Left <$> shortForm <|> Right <$> longForm
+  contents <- Left <$> funcShortForm <|> Right <$> funcLongForm
   pos <- getPosition
   case contents of
     Left stmt -> return $ Function pos type_ name [(args, stmt)]
@@ -149,17 +156,21 @@ functionDecl = do
                  | length args'' /= length (fst $ head insides) ->
                      fail "incompatible arglist in function declaration"
                  | otherwise -> return $ Function pos type_ name insides
-   where shortForm = operator "=" *> newlines *> statement
-         longForm = newlines1 *> many (singleForm <* newlines1) <* keyword "end"
-         singleForm = do
-                  operator "("
-                  newlines
-                  args <- sepBy pattern nlComma
-                  newlines
-                  operator ")"
-                  operator "->"
-                  stmt <- statement
-                  return (args, stmt)
+
+funcShortForm :: EParser Expr
+funcShortForm = operator "=" *> newlines *> statement
+
+funcLongForm :: EParser [([Pattern], Expr)]
+funcLongForm = newlines1 *> many (singleForm <* newlines1) <* keyword "end"
+    where singleForm = do
+            operator "("
+            newlines
+            args <- sepBy pattern nlComma
+            newlines
+            operator ")"
+            operator "->"
+            stmt <- statement
+            return (args, stmt)
 
 typeDecl :: EParser Decl
 typeDecl = do
@@ -460,19 +471,27 @@ letExpr = do
   newlines
   -- TODO Optimize out this 'try' without exploding everything
   clauses <- (:) <$> clause <*> many (try $ newlines1 *> clause)
+  let (vars, funcs) = partitionEithers clauses
   newlines
   keyword "in"
   newlines
   expr <- toplevelExpr
   pos <- getPosition
-  return $ LetStmt pos clauses expr
-    where clause = do
+  return $ LetStmt pos vars funcs expr
+    where clause = Left <$> try varClause <|> Right <$> try funcClause
+          -- TODO Factor out the 'try's in 'clause'
+          varClause = do
             ident <- pattern
             newlines
             operator "="
             newlines
             expr <- statement
             return (ident, expr)
+          funcClause = do
+            func <- functionDecl'
+            case func of
+              Function _ type_ name clauses -> return (name, type_, clauses)
+              _ -> unexpected $ show func
 
 -- TODO Lambdas and function declarations should be able to pattern match their
 --      arguments.
@@ -638,6 +657,8 @@ condit = try bindExpr <|> CondExpr <$> toplevelExpr
             expr <- toplevelExpr
             return $ BindExpr lhs expr
 
+-- TODO Try literal patterns (so numbers, etc. don't have to be written
+--      with a caret (^) preceding them)
 pattern :: EParser Pattern
 pattern = try tuplePattern <|> listPattern <|> exprPattern <|>
           UnderscorePattern <$> (matchToken (Identifier "_") *> getPosition) <|>
