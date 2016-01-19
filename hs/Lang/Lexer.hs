@@ -46,6 +46,7 @@ keyword = Keyword <$> choice (map (try . string) keywords)
 operator :: Parsec String () Token
 operator = Operator <$> choice (map (try . string) operators)
 
+-- TODO Consider disallowing %varName if we don't allow dynamic rebinding
 identifier :: Parsec String () Token
 identifier = do
   str <- (:) <$> (char '$' <|> char '@' <|> char '%' <|> alphaUnder) <*> many alNumUnder

@@ -12,8 +12,6 @@ import Text.Parsec.Error(ParseError)
 import Text.Parsec.Pos(SourcePos)
 import Control.Monad
 
--- ///// TODO 'def' syntax for functions rather than the current approach
-
 data FileData = FileData String [Decl] -- Package, declarations
                 deriving (Show, Eq)
 
@@ -29,9 +27,6 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Instance SourcePos String [Type] Type [Decl]
             deriving (Show, Eq)
 
--- ///// Is / Has operators
---       Think about how to handle this; I'm not sure I like this approach with
---       inheritance shoehorned in
 data Type = Tuple SourcePos [Type] Access |
             Named SourcePos String [Type] Access |
             Func SourcePos [Type] Type

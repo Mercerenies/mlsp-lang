@@ -1,5 +1,9 @@
 -- Based on MLSP5.txt
 
+-- ///// Decide how we want concepts and instances to work with the new
+--       class system and how type expressions should be modified to work with
+--       it as well.
+
 import Lang.Lexer
 import Lang.Parser
 import Lang.Printer
