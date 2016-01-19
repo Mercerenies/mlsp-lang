@@ -17,7 +17,7 @@ The parser is not nearly finished, so the code written below will not currently 
 
 ```
 class Matrix[$a]
-  matrixContents :: List[List[$a]]
+  @matrixContents :: List[List[$a]]
 end
 
 concept AdditiveMonoid

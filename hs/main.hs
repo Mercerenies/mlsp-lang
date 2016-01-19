@@ -3,6 +3,7 @@
 import Lang.Lexer
 import Lang.Parser
 import Lang.Printer
+import Lang.Identifier -- TODO Remove this; it's just to make the module load for testing
 import System.Environment
 import System.IO
 
