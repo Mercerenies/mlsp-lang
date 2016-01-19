@@ -5,7 +5,6 @@ module Lang.Printer(Output(..), SExpr(..), Lispable(..),
 --      concepts (possibly with some way to specify what must be implemented
 --      to avoid mutual infinite recursion like in Haskell typeclasses)
 
-import Data.Map(toList)
 import Lang.Parser
 import qualified Lang.Tokens as Tok
 import Lang.Operator
@@ -44,7 +43,7 @@ instance Lispable Decl where
     -- (module pos name &body rest)
     -- (function pos name (&optional type) &rest cases)
     --   ; where cases is a list of ((&rest pattern) stmt)
-    -- (type pos name (&rest args) parent (&rest vars) fields)
+    -- (type pos name (&rest args) synonym)
     --   ; where vars is a list of (name type)
     -- (concept pos name (&rest args) timing &rest vars)
     --   ; where vars is a list of (name type)
@@ -64,9 +63,9 @@ instance Lispable Decl where
                                Just x -> List [lispify x]
                                Nothing -> List []
               translateInside (ptn, stmt) = List [List $ map lispify ptn, lispify stmt]
-    lispify (Type pos name args parent vars fields) =
+    lispify (Type pos name args synonym) =
         List $ [Symbol "type", lispify pos, Atom name, List $ map Atom args,
-                lispify parent, List $ map lispify' vars, lispify fields]
+                lispify synonym]
     lispify (Concept pos name args bind vars) =
         List $ [Symbol "concept", lispify pos, Atom name, List $ map Atom args, timing] ++
              map lispify' vars
@@ -93,11 +92,6 @@ instance Lispable Type where
              map lispify args
     lispify (Func pos args result) =
         List $ [Symbol "func-type", lispify pos, List $ map lispify args, lispify result]
-
-instance Lispable Fields where
-    -- (&rest fields) ; where each field is (name access)
-    lispify (Fields mp) = List . map convert $ toList mp
-        where convert (str, acc) = List [Atom str, lispify acc]
 
 instance Lispable Expr where
     -- (call pos expr &rest args)

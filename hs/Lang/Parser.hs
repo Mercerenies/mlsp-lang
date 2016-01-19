@@ -1,14 +1,11 @@
 module Lang.Parser(FileData(..), Decl(..), Type(..), Expr(..),
                    Conditional(..), Pattern(..),
-                   Fields(..), Access(..), IfOp(..), ForOp(..), Call(..), Timing(..),
+                   Access(..), IfOp(..), ForOp(..), Call(..), Timing(..),
                    parseCode, file, toplevel) where
 
 import Lang.Tokens
 import Lang.Operator
 import Data.List(intercalate)
-import Data.Either(partitionEithers)
-import qualified Data.Map as Map
-import Data.Map(Map)
 import Text.Parsec.Prim
 import Text.Parsec.Combinator
 import Text.Parsec.Error(ParseError)
@@ -24,8 +21,7 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
             Function SourcePos (Maybe Type) String [([Pattern], Expr)] |
-            -- Name, parent, arguments, variables, fields (TODO Remove 'type')
-            Type SourcePos String [String] Type [(String, Type)] Fields |
+            Type SourcePos String [String] Type |
             -- Name, arguments, parents, variables, methods
             Class SourcePos String [String] [Type] [(String, Type)] [Decl] |
             -- Name, args, variables
@@ -73,9 +69,6 @@ data Conditional = CondExpr Expr |
                    BindExpr Pattern Expr
                    deriving (Show, Eq)
 
-newtype Fields = Fields (Map String Access)
-    deriving (Show, Read, Eq)
-
 data Access = Read | ReadWrite
               deriving (Show, Read, Eq, Ord)
 
@@ -90,10 +83,6 @@ data Call = Paren | Bracket | Dot String
 
 data Timing = Static | Dynamic
             deriving (Show, Read, Eq, Ord)
-
-instance Monoid Fields where
-    mempty = Fields Map.empty
-    (Fields m1) `mappend` (Fields m2) = Fields $ m1 `mappend` m2
 
 parseCode :: String -> [Lexeme] -> Either ParseError FileData
 parseCode = parse file
@@ -159,6 +148,7 @@ functionDecl = do
             getIdPattern _ = Nothing
             args' = mapM getIdPattern args
         in case args' of
+             Nothing -> fail "invalid pattern in function long form"
              Just args''
                  | null insides -> fail "empty function declaration"
                  | length args'' /= length (fst $ head insides) ->
@@ -176,41 +166,18 @@ functionDecl = do
                   stmt <- statement
                   return (args, stmt)
 
-{-
-functionDecl :: EParser Decl
-functionDecl = do
-  type_ <- option Nothing $ try (Just <$> typeSpec <* newlines1)
-  name <- identifier
-  type' <- case type_ of
-             Nothing -> return Nothing
-             Just (str, expr)
-                 | str == name -> return $ Just expr
-                 | otherwise -> fail "preceding type declaration should match function"
-  operator "("
-  newlines
-  args <- sepBy identifier nlComma
-  newlines
-  operator ")"
-  operator "="
-  newlines
-  stmt <- statement
-  pos <- getPosition
-  return $ Function pos type' name args stmt
--}
-
 typeDecl :: EParser Decl
 typeDecl = do
   keyword "type"
   newlines
   name <- identifier
   args <- option [] $ operator "[" *> sepBy identifier nlComma <* operator "]"
-  pos0 <- getPosition
-  parent <- option (Named pos0 "T" [] Read) $ operator "(" *> typeExpr <* operator ")"
-  newlines1
-  (types, fields) <- typeInterior
-  keyword "end"
+  newlines
+  operator "="
+  newlines
+  synonym <- typeExpr
   pos <- getPosition
-  return $ Type pos name args parent types fields
+  return $ Type pos name args synonym
 
 classDecl :: EParser Decl
 classDecl = do
@@ -240,28 +207,6 @@ classDecl = do
                             newlines1
                             return (name, type_)
             classMethods = many $ functionDecl <* newlines1
-
-typeInterior :: EParser ([(String, Type)], Fields)
-typeInterior = do
-  (types, fields) <- partitionEithers <$> endBy typeStatement newlines1
-  return (types, mconcat fields)
-
-typeStatement :: EParser (Either (String, Type) Fields)
-typeStatement = Right <$> fields_ <|> Left <$> type_
-    where type_ = typeSpec
-          fields_ = do
-            keyword "fields"
-            newlines1
-            exprs <- fieldsExpr
-            keyword "end"
-            return exprs
-
-fieldsExpr :: EParser Fields
-fieldsExpr = (Fields . Map.fromList) <$> endBy identifier' newlines1
-    where identifier' = do
-            result <- identifier
-            opt <- accessSuffix
-            return (result, opt)
 
 typeSpec :: EParser (String, Type)
 typeSpec = do
