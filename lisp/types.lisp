@@ -1,8 +1,11 @@
 (in-package #:mlsp)
 
-; ///// Concepts, instances, functions
-; ///// Concepts need to introduce their functions into the current scope
-;       in addition to themselves
+; ///// Have a TODO list, future Silvio:
+; - Documentation for the rest of the files
+; - Function declarations themselves (by extension, expressions)
+; - All of the declarations (and everything else, for that matter) need to
+;   remember their source position. Do this with a parent class whose :initform
+;   is *source-pos*
 
 (defclass named ()
   ((name :accessor name
@@ -29,19 +32,35 @@
     (format stream "~S ~S"
             (name obj) (module-decl obj))))
 
-; Object should be named
-; Note that as a special case (for convenience), if the object
-; is nil, this function will do nothing. Thus, it is safe to
-; pass on a return value from a function that returns nil on
-; failure to this function.
 (defun put-object-in-module (obj module)
-  (check-type obj named "a named object")
-  (if (gethash (name obj) (module-decl module))
-      (signal 'name-error :message (format nil "name conflict on ~S" (name obj)))
-      (setf (gethash (name obj) (module-decl module)) obj)))
+  "Places the named object into the module or package given. If the object
+   is non-nil, it should be an instance of named and will be placed in the module
+   under its own name, signaling a name-error if there is a name conflict. If the
+   object is nil, this function does nothing."
+  (when obj
+    (check-type obj named "a named object")
+    (if (gethash (name obj) (module-decl module))
+        (signal 'name-error :message (format nil "name conflict on ~S" (name obj)))
+        (setf (gethash (name obj) (module-decl module)) obj))))
+
+(defun put-objects-in-module (obj module)
+  "Places the named object or list of named objects into the module or package given."
+  (loop for elem in (if (listp obj) obj (list obj))
+        do (put-object-in-module elem module)))
 
 (defclass basic-func (named)
   ())
+
+(defclass concept-func (named)
+  ((owner :accessor func-concept
+          :initarg :concept
+          :initform nil
+          :type basic-concept)))
+
+(defmethod print-object ((obj concept-func) stream)
+  (print-unreadable-object (obj stream :type t)
+    (format stream "name=~S concept=~S"
+            (name obj) (func-concept obj))))
 
 (defclass basic-type (named)
   ((parent :accessor type-parent

@@ -1,6 +1,8 @@
 (in-package #:mlsp)
 
 (defun initial-read (filename)
+  "Performs the initial read to establish the Common Lisp data structures from the
+   raw S-expressions provided in the file."
   (let ((errors nil)
         (warnings nil)
         (*print-escape* nil)
@@ -18,3 +20,7 @@
 (defun compile-code (filename)
   (multiple-value-bind (data data-clean?) (initial-read filename)
     data))
+
+(defun compile-circular (filename)
+  (let ((*print-circle* t))
+    (format t "~W" (compile-code filename))))

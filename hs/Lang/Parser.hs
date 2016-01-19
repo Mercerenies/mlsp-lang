@@ -15,6 +15,8 @@ import Text.Parsec.Error(ParseError)
 import Text.Parsec.Pos(SourcePos)
 import Control.Monad
 
+-- ///// TODO 'def' syntax for functions rather than the current approach
+
 data FileData = FileData String [Decl] -- Package, declarations
                 deriving (Show, Eq)
 
@@ -22,13 +24,18 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
             Function SourcePos (Maybe Type) String [String] Expr |
-            -- Name, parent, arguments, variables, fields
+            -- Name, parent, arguments, variables, fields (TODO Remove 'type')
             Type SourcePos String [String] Type [(String, Type)] Fields |
+            -- Name, arguments, parents, variables, methods
+            Class SourcePos String [String] [Type] [(String, Type)] [Decl] |
             -- Name, args, variables
             Concept SourcePos String [String] Timing [(String, Type)] |
             Instance SourcePos String [Type] Type [Decl]
             deriving (Show, Eq)
 
+-- ///// Is / Has operators
+--       Think about how to handle this; I'm not sure I like this approach with
+--       inheritance shoehorned in
 data Type = Tuple SourcePos [Type] Access |
             Named SourcePos String [Type] Access |
             Func SourcePos [Type] Type
@@ -101,7 +108,8 @@ file = do
 
 toplevel :: EParser Decl
 toplevel = moduleDecl <|> functionDecl <|> typeDecl <|>
-           conceptDecl <|> instanceDecl <|> importInclude
+           conceptDecl <|> instanceDecl <|> importInclude <|>
+           classDecl
 
 importInclude :: EParser Decl
 importInclude = do
@@ -164,6 +172,36 @@ typeDecl = do
   pos <- getPosition
   return $ Type pos name args parent types fields
 
+classDecl :: EParser Decl
+classDecl = do
+  keyword "class"
+  newlines
+  name <- identifier
+  args <- option [] $ operator "[" *> sepBy identifier nlComma <* operator "]"
+  pos0 <- getPosition
+  parent <- option [Named pos0 "T" [] Read] $ do
+              operator "("
+              newlines
+              parents <- sepBy typeExpr nlComma
+              newlines
+              operator ")"
+              return parents
+  newlines1
+  fields <- classFields
+  methods <- classMethods
+  keyword "end"
+  pos <- getPosition
+  return $ Class pos name args parent fields methods
+      where classFields = many . try $ do
+                            -- TODO The try is temporary until we move to 'def's
+                            name <- identifier
+                            operator "::"
+                            newlines
+                            type_ <- typeExpr
+                            newlines1
+                            return (name, type_)
+            classMethods = many $ functionDecl <* newlines1
+
 typeInterior :: EParser ([(String, Type)], Fields)
 typeInterior = do
   (types, fields) <- partitionEithers <$> endBy typeStatement newlines1
@@ -195,15 +233,17 @@ typeSpec = do
   return (name, tpe)
 
 typeExpr :: EParser Type
-typeExpr = tupleTypeExpr <|> try funcTypeExpr <|> namedTypeExpr <?> "type expression"
+typeExpr = try funcTypeExpr <|> try tupleTypeExpr <|> namedTypeExpr <?> "type expression"
 
 tupleTypeExpr :: EParser Type
 tupleTypeExpr = do
-  operator "{"
+  operator "("
   newlines
   contents <- sepBy typeExpr nlComma
   newlines
-  operator "}"
+  operator ")"
+  when (length contents == 1) $
+       fail "tuple of length 1"
   access <- accessSuffix
   pos <- getPosition
   return $ Tuple pos contents access
@@ -321,9 +361,9 @@ basicExpr = Oper <$> getPosition <*> operatorExpr basicTerm <?> "basic expressio
 
 basicTerm :: EParser Expr
 basicTerm = beginEndExpr <|> ifExpr <|> forExpr <|> caseExpr <|> condExpr <|>
-            letExpr <|> lambdaExpr <|> parenExpr <|> try varAsn <|>
-            literalExpr <|> tupleExpr <|> listExpr <|>
-            try (Declare <$> getPosition <*> functionDecl) <|> try callExpr
+            letExpr <|> lambdaExpr <|> try varAsn <|>
+            literalExpr <|> listExpr <|> try tupleExpr <|>
+            parenExpr <|> try (Declare <$> getPosition <*> functionDecl) <|> try callExpr
 
 beginEndExpr :: EParser Expr
 beginEndExpr = do
@@ -497,11 +537,13 @@ literalExpr = do
 
 tupleExpr :: EParser Expr
 tupleExpr = do
-  operator "{"
+  operator "("
   newlines
   contents <- sepBy basicExpr nlComma
   newlines
-  operator "}"
+  operator ")"
+  when (length contents == 1) $
+       fail "tuple of length 1"
   pos <- getPosition
   return $ TupleExpr pos contents
 
@@ -618,14 +660,21 @@ condit = try bindExpr <|> CondExpr <$> toplevelExpr
             return $ BindExpr lhs expr
 
 pattern :: EParser Pattern
-pattern = tuplePattern <|> listPattern <|> exprPattern <|>
+pattern = try tuplePattern <|> listPattern <|> exprPattern <|>
           UnderscorePattern <$> (matchToken (Identifier "_") *> getPosition) <|>
           try typePattern <|> idPattern <?> "pattern"
 
 tuplePattern :: EParser Pattern
-tuplePattern = operator "{" *> newlines *>
-               (TuplePattern <$> getPosition <*> sepBy pattern nlComma)
-               <* newlines <* operator "}"
+tuplePattern = do
+  operator "("
+  newlines
+  contents <- sepBy pattern nlComma
+  newlines
+  operator ")"
+  when (length contents == 1) $
+       fail "tuple of length 1"
+  pos <- getPosition
+  return $ TuplePattern pos contents
 
 listPattern :: EParser Pattern
 listPattern = do
@@ -668,7 +717,6 @@ idPattern = IdPattern <$> getPosition <*> identifier
 accessSuffix :: EParser Access
 accessSuffix = option Read $ ReadWrite <$ operator "!"
 
--- TODO Think about whether this change is okay
 nlComma :: EParser ()
 nlComma = void $ operator "," <* newlines
 
