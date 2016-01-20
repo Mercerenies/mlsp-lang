@@ -20,6 +20,9 @@ type FunctionBody = [([Pattern], Expr)]
 
 -- TODO Do something useful with modules to make them more than just namespaces
 
+-- TODO With the new 'def' syntax, we might be able to support some symbols in
+--      method names specifically (x.var=, x.[], etc.)
+
 -- TODO Classes which have a finite and specified number of children
 data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
@@ -35,9 +38,6 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
 
 -- ///// Unions and intersections and how they'll work with concepts and instances
 
--- TODO Change the function type syntax so that it parses as a tuple argument and
---      desugars:
---        (a, b) -> c ## A function of one argument which is a tuple
 data Type = Tuple SourcePos [Type] Access |
             Named SourcePos String [Type] Access |
             Func SourcePos [Type] Type
@@ -233,6 +233,7 @@ typeSpec = do
 typeExpr :: EParser Type
 typeExpr = try funcTypeExpr <|> try tupleTypeExpr <|> namedTypeExpr <?> "type expression"
 
+-- NOTE: If the length ends up being one, it will return the inner type, NOT a one-tuple.
 tupleTypeExpr :: EParser Type
 tupleTypeExpr = do
   operator "("
@@ -240,11 +241,12 @@ tupleTypeExpr = do
   contents <- sepBy typeExpr nlComma
   newlines
   operator ")"
-  when (length contents == 1) $
-       fail "tuple of length 1"
-  access <- accessSuffix
-  pos <- getPosition
-  return $ Tuple pos contents access
+  case contents of
+    [single] -> return single -- Simple grouping parens
+    _ -> do
+      access <- accessSuffix
+      pos <- getPosition
+      return $ Tuple pos contents access
 
 namedTypeExpr :: EParser Type
 namedTypeExpr = do
