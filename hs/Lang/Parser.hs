@@ -30,10 +30,9 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Function SourcePos (Maybe Type) String FunctionBody |
             TypeDecl SourcePos String [String] TypeExpr |
             -- Name, arguments, parents, variables, methods
-            Class SourcePos String [String] Context [TypeExpr]
-                [(String, TypeExpr)] [Decl] |
+            Class SourcePos String [String] [TypeExpr] [(String, TypeExpr)] [Decl] |
             -- Name, args, variables
-            Concept SourcePos String [String] Context Timing [(String, TypeExpr)] |
+            Concept SourcePos String [String] Context Timing [(String, Type)] |
             Instance SourcePos String [TypeExpr] Context [Decl] -- TODO Remove arg4
             deriving (Show, Eq)
 
@@ -42,8 +41,9 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
 data Type = Type TypeExpr Context
             deriving (Show, Eq)
 
-data Context = Context -- TODO This
-               deriving (Show, Eq)
+-- The type expressions should evaluate to contexts
+newtype Context = Context [TypeExpr]
+    deriving (Show, Eq)
 
 data TypeExpr = Tuple SourcePos [TypeExpr] Access |
                 Named SourcePos String [TypeExpr] Access |
@@ -204,7 +204,6 @@ classDecl :: EParser Decl
 classDecl = do
   keyword "class"
   newlines
-  context <- contextExpr -- TODO Integrate the context
   name <- identifier
   args <- option [] $ operator "[" *> sepBy identifier nlComma <* operator "]"
   pos0 <- getPosition
@@ -220,7 +219,7 @@ classDecl = do
   methods <- classMethods
   keyword "end"
   pos <- getPosition
-  return $ Class pos name args context parent fields methods
+  return $ Class pos name args parent fields methods
       where classFields = many $ do
                             name <- identifier
                             operator "::"
@@ -230,19 +229,30 @@ classDecl = do
                             return (name, type_)
             classMethods = many $ functionDecl <* newlines1
 
-typeSpec :: EParser (String, TypeExpr)
+typeSpec :: EParser (String, Type)
 typeSpec = do
   name <- identifier
   operator "::"
   newlines
-  tpe <- typeExpr
+  tpe <- typeAndContext
   return (name, tpe)
 
 typeAndContext :: EParser Type
-typeAndContext = Type <$> typeExpr <*> contextExpr
+typeAndContext = Type <$> typeExpr <*> option idContext (try $ newlines *> contextExpr)
 
 contextExpr :: EParser Context
-contextExpr = pure Context -- TODO Actual context here
+contextExpr = do
+  keyword "where"
+  newlines
+  Context <$> (shortContext <|> longContext)
+      where shortContext = return <$> typeExpr
+            longContext = do
+                operator "("
+                newlines
+                inner <- sepBy typeExpr nlComma
+                newlines
+                operator ")"
+                return inner
 
 typeExpr :: EParser TypeExpr
 typeExpr = try funcTypeExpr <|> try tupleTypeExpr <|> namedTypeExpr <?> "type expression"
@@ -292,7 +302,6 @@ funcTypeExpr = do
 conceptDecl :: EParser Decl
 conceptDecl = do
   keyword "concept"
-  context <- contextExpr -- TODO Integrate the context
   newlines
   binding <- option Static $ Dynamic <$ keyword "dynamic" <* newlines
   name <- identifier
@@ -303,6 +312,7 @@ conceptDecl = do
                 newlines
                 operator "]"
                 return args'
+  context <- option idContext $ try (newlines *> contextExpr)
   newlines1
   internals <- endBy typeSpec newlines1
   keyword "end"
@@ -312,7 +322,6 @@ conceptDecl = do
 instanceDecl :: EParser Decl
 instanceDecl = do
   keyword "instance"
-  context <- contextExpr -- TODO Integrate the context
   newlines
   name <- identifier
   args <- option [] $ do
@@ -322,6 +331,7 @@ instanceDecl = do
                 newlines
                 operator "]"
                 return args'
+  context <- option idContext $ try (newlines *> contextExpr)
   newlines1
   internals <- endBy functionDecl newlines1
   keyword "end"
@@ -750,3 +760,6 @@ dottedIdentifier = do
   first <- identifier
   rest <- many $ operator "." *> identifier
   return $ intercalate "." (first : rest)
+
+idContext :: Context
+idContext = Context []
