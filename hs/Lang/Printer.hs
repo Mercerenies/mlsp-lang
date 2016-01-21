@@ -138,8 +138,6 @@ instance Lispable Expr where
         List $ [Symbol "tuple", lispify pos] ++ map lispify args
     lispify (ListExpr pos args) =
         List $ [Symbol "list", lispify pos] ++ map lispify args
-    lispify (Declare pos decl) =
-        List $ [Symbol "declare", lispify pos, lispify decl]
     lispify (VarAsn pos name expr) =
         List $ [Symbol "asn", lispify pos, lispify name, lispify expr]
     lispify (Subscript pos expr args) =

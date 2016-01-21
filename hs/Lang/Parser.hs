@@ -57,7 +57,6 @@ data Expr = FunctionCall SourcePos Expr [Expr] |
             Literal SourcePos Token |
             TupleExpr SourcePos [Expr] |
             ListExpr SourcePos [Expr] |
-            Declare SourcePos Decl | -- TODO Should this be here?
             VarAsn SourcePos Pattern Expr |
             Subscript SourcePos Expr [Expr] |
             Ident SourcePos String |
@@ -392,7 +391,7 @@ basicTerm :: EParser Expr
 basicTerm = beginEndExpr <|> ifExpr <|> forExpr <|> caseExpr <|> condExpr <|>
             letExpr <|> lambdaExpr <|> try varAsn <|>
             literalExpr <|> listExpr <|> try tupleExpr <|>
-            parenExpr <|> try (Declare <$> getPosition <*> functionDecl) <|> try callExpr
+            parenExpr <|> try callExpr
 
 beginEndExpr :: EParser Expr
 beginEndExpr = do
