@@ -45,8 +45,9 @@ instance Lispable Decl where
     --   ; where cases is a list of ((&rest pattern) stmt)
     -- (type pos name (&rest args) synonym)
     --   ; where vars is a list of (name type)
-    -- (concept pos name (&rest args) ctx timing &rest vars)
+    -- (concept pos name (&rest args) ctx &rest vars)
     --   ; where vars is a list of (name type)
+    -- (generic pos name type)
     -- (instance pos name (&rest args) ctx &rest vars)
     -- (class pos name (&rest args) parent (&rest vars) methods)
     --   ; where vars is a list of (name type)
@@ -66,13 +67,12 @@ instance Lispable Decl where
     lispify (TypeDecl pos name args synonym) =
         List $ [Symbol "type", lispify pos, Atom name, List $ map Atom args,
                 lispify synonym]
-    lispify (Concept pos name args ctx bind vars) =
+    lispify (Concept pos name args ctx vars) =
         List $ [Symbol "concept", lispify pos, Atom name,
-                List $ map Atom args, lispify ctx, timing] ++
+                List $ map Atom args, lispify ctx] ++
              map lispify' vars
-        where timing = case bind of
-                         Static -> Symbol "static"
-                         Dynamic -> Symbol "dynamic"
+    lispify (Generic pos name type_) =
+        List $ [Symbol "generic", lispify pos, Atom name, lispify type_]
     lispify (Instance pos name args ctx vars) =
         List $ [Symbol "instance", lispify pos, Atom name,
                 List $ map lispify args, lispify ctx]

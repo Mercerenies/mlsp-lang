@@ -33,11 +33,10 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             -- Name, arguments, parent, variables, methods
             Class SourcePos String [String] TypeExpr [(String, TypeExpr)] [Decl] |
             -- Name, args, variables
-            Concept SourcePos String [String] Context Timing [(String, Type)] |
-            Instance SourcePos String [TypeExpr] Context [Decl] -- TODO Remove arg4
+            Concept SourcePos String [String] Context [(String, Type)] |
+            Instance SourcePos String [TypeExpr] Context [Decl] |
+            Generic SourcePos String Type
             deriving (Show, Eq)
-
--- ///// Unions and intersections and how they'll work with concepts and instances
 
 data Type = Type TypeExpr Context
             deriving (Show, Eq)
@@ -121,7 +120,7 @@ file = do
 toplevel :: EParser Decl
 toplevel = moduleDecl <|> functionDecl <|> typeDecl <|>
            conceptDecl <|> instanceDecl <|> importInclude <|>
-           classDecl
+           classDecl <|> genericDecl
 
 importInclude :: EParser Decl
 importInclude = do
@@ -149,6 +148,18 @@ moduleDecl = do
   keyword "end"
   pos <- getPosition
   return $ Module pos name contents
+
+genericDecl :: EParser Decl
+genericDecl = do
+  keyword "generic"
+  newlines
+  name <- identifier
+  newlines
+  operator "::"
+  newlines
+  expr <- typeAndContext
+  pos <- getPosition
+  return $ Generic pos name expr
 
 functionDecl :: EParser Decl
 functionDecl = do
@@ -315,7 +326,6 @@ conceptDecl :: EParser Decl
 conceptDecl = do
   keyword "concept"
   newlines
-  binding <- option Static $ Dynamic <$ keyword "dynamic" <* newlines
   name <- identifier
   args <- option [] $ do
                 operator "["
@@ -329,7 +339,7 @@ conceptDecl = do
   internals <- endBy typeSpec newlines1
   keyword "end"
   pos <- getPosition
-  return $ Concept pos name args context binding internals
+  return $ Concept pos name args context internals
 
 instanceDecl :: EParser Decl
 instanceDecl = do
