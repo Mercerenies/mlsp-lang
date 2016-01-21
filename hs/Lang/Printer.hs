@@ -178,6 +178,19 @@ instance Lispable Expr where
     lispify (Lambda pos args expr) =
         List $ [Symbol "lambda", lispify pos, List $ map Atom args, lispify expr]
 
+instance Lispable Literal where
+    -- (literal type &rest contents)
+    lispify tok = List $ [Symbol "literal", Symbol type_] ++ contents
+        where (type_, contents) =
+                  case tok of
+                    LReMatch w -> ("rematch", [Atom w])
+                    LReSub w0 w1 -> ("resub", [Atom w0, Atom w1])
+                    LNumber w0 w1 w2 -> ("number", [Symbol $ show w0, Atom w1,
+                                                    Symbol $ show w2])
+                    LCharacter ch -> ("character", [Atom [ch]])
+                    LString toks -> ("string", map lispify toks)
+                    LSymbol sym -> ("symbol", [Atom sym])
+
 instance Lispable Tok.Token where
     -- (literal type &rest contents)
     lispify tok = List $ [Symbol "literal", Symbol type_] ++ contents

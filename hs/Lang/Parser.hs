@@ -1,5 +1,5 @@
 module Lang.Parser(FileData(..), Decl(..), Type(..), TypeExpr(..), Context(..), Expr(..),
-                   Conditional(..), Pattern(..),
+                   Conditional(..), Pattern(..), Literal(..),
                    Access(..), IfOp(..), ForOp(..), Call(..), Timing(..),
                    parseCode, file, toplevel) where
 
@@ -7,6 +7,7 @@ import Lang.Tokens
 import Lang.Operator
 import Data.List(intercalate)
 import Data.Either(partitionEithers)
+import Data.Maybe(isJust)
 import Text.Parsec.Prim
 import Text.Parsec.Combinator
 import Text.Parsec.Error(ParseError)
@@ -54,7 +55,7 @@ data TypeExpr = TypeOper SourcePos (OpExpr TypeOp TypeExpr) |
 data Expr = FunctionCall SourcePos Expr [Expr] |
             DotCall SourcePos Expr String [Expr] |
             Block SourcePos [Expr] |
-            Literal SourcePos Token |
+            Literal SourcePos Literal |
             TupleExpr SourcePos [Expr] |
             ListExpr SourcePos [Expr] |
             VarAsn SourcePos Pattern Expr |
@@ -69,6 +70,14 @@ data Expr = FunctionCall SourcePos Expr [Expr] |
             LetStmt SourcePos [(Pattern, Expr)] [(String, Maybe Type, FunctionBody)] Expr |
             Lambda SourcePos [String] Expr
             deriving (Show, Eq)
+
+data Literal = LReMatch String |
+               LReSub String String |
+               LNumber Integer String Integer |
+               LCharacter Char |
+               LString [TextToken] |
+               LSymbol String
+               deriving (Show, Read, Eq)
 
 data Pattern = TuplePattern SourcePos [Pattern] |
                ListPattern SourcePos [Pattern] |
@@ -556,20 +565,20 @@ parenExpr = operator "(" *> newlines *>
 
 literalExpr :: EParser Expr
 literalExpr = do
-  lex <- satisfy $ \x -> case x of
-                           Token y _ -> case y of
-                                          ReMatch {} -> True
-                                          ReSub {} -> True
-                                          Number {} -> True
-                                          Character {} -> True
-                                          String {} -> True
-                                          Symbol {} -> True
-                                          _ -> False
-                           _ -> False
+  lex <- satisfy $ isJust . literalize
   pos <- getPosition
-  case lex of
-    Token x _ -> return $ Literal pos x
-    _ -> unexpected "newline"
+  case literalize lex of
+    Just x -> return $ Literal pos x
+    _ -> unexpected (show lex) <?> "literal"
+ where literalize (Token y _) = case y of
+                                  ReMatch s -> Just $ LReMatch s
+                                  ReSub a b -> Just $ LReSub a b
+                                  Number n d e -> Just $ LNumber n d e
+                                  Character c -> Just $ LCharacter c
+                                  String s -> Just $ LString s
+                                  Symbol s -> Just $ LSymbol s
+                                  _ -> Nothing
+       literalize _ = Nothing
 
 tupleExpr :: EParser Expr
 tupleExpr = do
