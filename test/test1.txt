@@ -1,0 +1,17 @@
+
+def f(x) = g(x)(y)
+def f(x) = g x, y
+def f(x) = g(x), (y)
+def f(x) = g[x]
+def f(x) = g([x])
+def f(x) = g([x], [y])
+def f(x) = g x
+def f(x) = g(x)
+def f(x) = g(x)[y][z](t)
+
+def f(x) = begin
+  a += 1
+  b -= 2
+  c &&= 1
+  d ||= 2
+end

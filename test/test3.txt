@@ -1,0 +1,13 @@
+
+def f(x) = case x
+  when q
+    vvv
+  when &Z[y]
+    www
+  when _ then xyz
+end
+def f(x) = for x = 1
+  a.xblah()
+  blah()
+  blah()
+end

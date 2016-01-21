@@ -1,0 +1,11 @@
+
+def f() = cond
+  when a <- 1 then "One"
+  when 2
+    "Two"
+  when 3
+    somethingHere
+    "Three"
+  when 4 then "Four"
+  else "Other"
+end

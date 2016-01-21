@@ -1,0 +1,6 @@
+
+class Test
+  f :: Int
+  g :: Double
+  def function(x) :: (Int) -> Int = 1
+end
