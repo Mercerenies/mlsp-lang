@@ -91,9 +91,12 @@ instance Lispable Context where
     lispify (Context ctx) = List $ Atom "context" : map lispify ctx
 
 instance Lispable TypeExpr where
+    -- (op pos expr)
     -- (tuple-type pos acc &rest types)
     -- (named-type pos name acc &rest args)
     -- (func-type pos (&rest args) result)
+    lispify (TypeOper pos oe) =
+        List $ [Symbol "op", lispify pos, lispify oe]
     lispify (Tuple pos xs acc) =
         List $ [Symbol "tuple-type", lispify pos, lispify acc] ++ map lispify xs
     lispify (Named pos name args acc) =
@@ -199,7 +202,7 @@ instance Lispable Tok.TextToken where
     lispify (Tok.Text str) = List [Symbol "text", Atom str]
     lispify (Tok.Interp str) = List [Symbol "interp", Atom str]
 
-instance Lispable a => Lispable (OpExpr a) where
+instance (Lispable o, Lispable a) => Lispable (OpExpr o a) where
     -- (operator &rest exprs)
     lispify (OpExpr a) = lispify a
     lispify (Pre op a) = List [lispify op, lispify a]
@@ -234,6 +237,10 @@ instance Lispable Op where
     lispify Greater = Symbol ">"
     lispify LE = Symbol "<="
     lispify GE = Symbol ">="
+
+instance Lispable TypeOp where
+    lispify Union = Symbol "union"
+    lispify Inter = Symbol "intersect"
 
 instance Lispable Conditional where
     -- expr

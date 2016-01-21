@@ -45,7 +45,8 @@ data Type = Type TypeExpr Context
 newtype Context = Context [TypeExpr]
     deriving (Show, Eq)
 
-data TypeExpr = Tuple SourcePos [TypeExpr] Access |
+data TypeExpr = TypeOper SourcePos (OpExpr TypeOp TypeExpr) |
+                Tuple SourcePos [TypeExpr] Access |
                 Named SourcePos String [TypeExpr] Access |
                 Func SourcePos [TypeExpr] TypeExpr
                 deriving (Show, Eq)
@@ -60,7 +61,7 @@ data Expr = FunctionCall SourcePos Expr [Expr] |
             VarAsn SourcePos Pattern Expr |
             Subscript SourcePos Expr [Expr] |
             Ident SourcePos String |
-            Oper SourcePos (OpExpr Expr) |
+            Oper SourcePos (OpExpr Op Expr) |
             IfStmt SourcePos IfOp Conditional Expr (Maybe Expr) |
             ForStmt SourcePos ForOp Pattern Expr Expr |
             Case SourcePos Expr [(Pattern, Maybe Expr, Expr)] |
@@ -255,7 +256,10 @@ contextExpr = do
                 return inner
 
 typeExpr :: EParser TypeExpr
-typeExpr = try funcTypeExpr <|> try tupleTypeExpr <|> namedTypeExpr <?> "type expression"
+typeExpr = TypeOper <$> getPosition <*> typeOperatorExpr typeTerm
+
+typeTerm :: EParser TypeExpr
+typeTerm = try funcTypeExpr <|> try tupleTypeExpr <|> namedTypeExpr <?> "type expression"
 
 -- NOTE: If the length ends up being one, it will return the inner type, NOT a one-tuple.
 tupleTypeExpr :: EParser TypeExpr
