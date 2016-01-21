@@ -1,4 +1,4 @@
-module Lang.Parser(FileData(..), Decl(..), Type(..), Expr(..),
+module Lang.Parser(FileData(..), Decl(..), Type(..), TypeExpr(..), Context(..), Expr(..),
                    Conditional(..), Pattern(..),
                    Access(..), IfOp(..), ForOp(..), Call(..), Timing(..),
                    parseCode, file, toplevel) where
@@ -28,20 +28,27 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
             Function SourcePos (Maybe Type) String FunctionBody |
-            Type SourcePos String [String] Type |
+            TypeDecl SourcePos String [String] TypeExpr |
             -- Name, arguments, parents, variables, methods
-            Class SourcePos String [String] [Type] [(String, Type)] [Decl] |
+            Class SourcePos String [String] Context [TypeExpr]
+                [(String, TypeExpr)] [Decl] |
             -- Name, args, variables
-            Concept SourcePos String [String] Timing [(String, Type)] |
-            Instance SourcePos String [Type] Type [Decl]
+            Concept SourcePos String [String] Context Timing [(String, TypeExpr)] |
+            Instance SourcePos String [TypeExpr] Context [Decl] -- TODO Remove arg4
             deriving (Show, Eq)
 
 -- ///// Unions and intersections and how they'll work with concepts and instances
 
-data Type = Tuple SourcePos [Type] Access |
-            Named SourcePos String [Type] Access |
-            Func SourcePos [Type] Type
+data Type = Type TypeExpr Context
             deriving (Show, Eq)
+
+data Context = Context -- TODO This
+               deriving (Show, Eq)
+
+data TypeExpr = Tuple SourcePos [TypeExpr] Access |
+                Named SourcePos String [TypeExpr] Access |
+                Func SourcePos [TypeExpr] TypeExpr
+                deriving (Show, Eq)
 
 data Expr = FunctionCall SourcePos Expr [Expr] |
             DotCall SourcePos Expr String [Expr] |
@@ -49,7 +56,7 @@ data Expr = FunctionCall SourcePos Expr [Expr] |
             Literal SourcePos Token |
             TupleExpr SourcePos [Expr] |
             ListExpr SourcePos [Expr] |
-            Declare SourcePos Decl |
+            Declare SourcePos Decl | -- TODO Should this be here?
             VarAsn SourcePos Pattern Expr |
             Subscript SourcePos Expr [Expr] |
             Ident SourcePos String |
@@ -148,7 +155,7 @@ functionDecl' = do
   args <- sepBy pattern nlComma
   newlines
   operator ")"
-  type_ <- optionMaybe $ operator "::" *> newlines *> typeExpr
+  type_ <- optionMaybe $ operator "::" *> newlines *> typeAndContext
   contents <- Left <$> funcShortForm <|> Right <$> funcLongForm
   pos <- getPosition
   case contents of
@@ -191,12 +198,13 @@ typeDecl = do
   newlines
   synonym <- typeExpr
   pos <- getPosition
-  return $ Type pos name args synonym
+  return $ TypeDecl pos name args synonym
 
 classDecl :: EParser Decl
 classDecl = do
   keyword "class"
   newlines
+  context <- contextExpr -- TODO Integrate the context
   name <- identifier
   args <- option [] $ operator "[" *> sepBy identifier nlComma <* operator "]"
   pos0 <- getPosition
@@ -212,7 +220,7 @@ classDecl = do
   methods <- classMethods
   keyword "end"
   pos <- getPosition
-  return $ Class pos name args parent fields methods
+  return $ Class pos name args context parent fields methods
       where classFields = many $ do
                             name <- identifier
                             operator "::"
@@ -222,7 +230,7 @@ classDecl = do
                             return (name, type_)
             classMethods = many $ functionDecl <* newlines1
 
-typeSpec :: EParser (String, Type)
+typeSpec :: EParser (String, TypeExpr)
 typeSpec = do
   name <- identifier
   operator "::"
@@ -230,11 +238,17 @@ typeSpec = do
   tpe <- typeExpr
   return (name, tpe)
 
-typeExpr :: EParser Type
+typeAndContext :: EParser Type
+typeAndContext = Type <$> typeExpr <*> contextExpr
+
+contextExpr :: EParser Context
+contextExpr = pure Context -- TODO Actual context here
+
+typeExpr :: EParser TypeExpr
 typeExpr = try funcTypeExpr <|> try tupleTypeExpr <|> namedTypeExpr <?> "type expression"
 
 -- NOTE: If the length ends up being one, it will return the inner type, NOT a one-tuple.
-tupleTypeExpr :: EParser Type
+tupleTypeExpr :: EParser TypeExpr
 tupleTypeExpr = do
   operator "("
   newlines
@@ -248,7 +262,7 @@ tupleTypeExpr = do
       pos <- getPosition
       return $ Tuple pos contents access
 
-namedTypeExpr :: EParser Type
+namedTypeExpr :: EParser TypeExpr
 namedTypeExpr = do
   name <- dottedIdentifier
   args <- option [] $ do
@@ -262,7 +276,7 @@ namedTypeExpr = do
   pos <- getPosition
   return $ Named pos name args access
 
-funcTypeExpr :: EParser Type
+funcTypeExpr :: EParser TypeExpr
 funcTypeExpr = do
   operator "("
   newlines
@@ -278,6 +292,7 @@ funcTypeExpr = do
 conceptDecl :: EParser Decl
 conceptDecl = do
   keyword "concept"
+  context <- contextExpr -- TODO Integrate the context
   newlines
   binding <- option Static $ Dynamic <$ keyword "dynamic" <* newlines
   name <- identifier
@@ -292,11 +307,12 @@ conceptDecl = do
   internals <- endBy typeSpec newlines1
   keyword "end"
   pos <- getPosition
-  return $ Concept pos name args binding internals
+  return $ Concept pos name args context binding internals
 
 instanceDecl :: EParser Decl
 instanceDecl = do
   keyword "instance"
+  context <- contextExpr -- TODO Integrate the context
   newlines
   name <- identifier
   args <- option [] $ do
@@ -306,12 +322,11 @@ instanceDecl = do
                 newlines
                 operator "]"
                 return args'
-  impl <- typeExpr
   newlines1
   internals <- endBy functionDecl newlines1
   keyword "end"
   pos <- getPosition
-  return $ Instance pos name args impl internals
+  return $ Instance pos name args context internals
 
 statement :: EParser Expr
 statement = do

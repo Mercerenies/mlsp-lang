@@ -45,10 +45,10 @@ instance Lispable Decl where
     --   ; where cases is a list of ((&rest pattern) stmt)
     -- (type pos name (&rest args) synonym)
     --   ; where vars is a list of (name type)
-    -- (concept pos name (&rest args) timing &rest vars)
+    -- (concept pos name (&rest args) ctx timing &rest vars)
     --   ; where vars is a list of (name type)
-    -- (instance pos name (&rest args) impl &rest vars)
-    -- (class pos name (&rest args) (&rest parents) (&rest vars) methods)
+    -- (instance pos name (&rest args) ctx &rest vars)
+    -- (class pos name (&rest args) ctx (&rest parents) (&rest vars) methods)
     --   ; where vars is a list of (name type)
     lispify (Include pos name hiding) =
         List $ [Symbol "include", lispify pos, Atom name, List $ map Atom hiding]
@@ -63,25 +63,34 @@ instance Lispable Decl where
                                Just x -> List [lispify x]
                                Nothing -> List []
               translateInside (ptn, stmt) = List [List $ map lispify ptn, lispify stmt]
-    lispify (Type pos name args synonym) =
+    lispify (TypeDecl pos name args synonym) =
         List $ [Symbol "type", lispify pos, Atom name, List $ map Atom args,
                 lispify synonym]
-    lispify (Concept pos name args bind vars) =
-        List $ [Symbol "concept", lispify pos, Atom name, List $ map Atom args, timing] ++
+    lispify (Concept pos name args ctx bind vars) =
+        List $ [Symbol "concept", lispify pos, Atom name,
+                List $ map Atom args, lispify ctx, timing] ++
              map lispify' vars
         where timing = case bind of
                          Static -> Symbol "static"
                          Dynamic -> Symbol "dynamic"
-    lispify (Instance pos name args impl vars) =
+    lispify (Instance pos name args ctx vars) =
         List $ [Symbol "instance", lispify pos, Atom name,
-                List $ map lispify args, lispify impl]
+                List $ map lispify args, lispify ctx]
                  ++ map lispify vars
-    lispify (Class pos name args parents vars methods) =
+    lispify (Class pos name args ctx parents vars methods) =
         List $ [Symbol "class", lispify pos, Atom name, List $ map Atom args,
-                List $ map lispify parents, List $ map lispify' vars,
+                lispify ctx, List $ map lispify parents, List $ map lispify' vars,
                 List $ map lispify methods]
 
 instance Lispable Type where
+    -- (with-context type context)
+    lispify (Type type_ context) = List [lispify type_, lispify context]
+
+instance Lispable Context where
+    -- TODO This properly
+    lispify Context = List []
+
+instance Lispable TypeExpr where
     -- (tuple-type pos acc &rest types)
     -- (named-type pos name acc &rest args)
     -- (func-type pos (&rest args) result)
