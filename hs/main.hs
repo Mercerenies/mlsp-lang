@@ -1,8 +1,13 @@
 -- Based on MLSP5.txt
 
+-- ///// Decide how we want concepts and instances to work with the new
+--       class system and how type expressions should be modified to work with
+--       it as well.
+
 import Lang.Lexer
 import Lang.Parser
 import Lang.Printer
+import Lang.Identifier -- TODO Remove this; it's just to make the module load for testing
 import System.Environment
 import System.IO
 

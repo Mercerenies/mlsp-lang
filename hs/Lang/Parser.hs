@@ -1,45 +1,55 @@
-module Lang.Parser(FileData(..), Decl(..), Type(..), Expr(..),
+module Lang.Parser(FileData(..), Decl(..), Type(..), TypeExpr(..), Context(..), Expr(..),
                    Conditional(..), Pattern(..),
-                   Fields(..), Access(..), IfOp(..), ForOp(..), Call(..), Timing(..),
+                   Access(..), IfOp(..), ForOp(..), Call(..), Timing(..),
                    parseCode, file, toplevel) where
 
 import Lang.Tokens
 import Lang.Operator
 import Data.List(intercalate)
 import Data.Either(partitionEithers)
-import qualified Data.Map as Map
-import Data.Map(Map)
 import Text.Parsec.Prim
 import Text.Parsec.Combinator
 import Text.Parsec.Error(ParseError)
 import Text.Parsec.Pos(SourcePos)
 import Control.Monad
 
--- ///// TODO 'def' syntax for functions rather than the current approach
-
 data FileData = FileData String [Decl] -- Package, declarations
                 deriving (Show, Eq)
 
+type FunctionBody = [([Pattern], Expr)]
+
+-- TODO Do something useful with modules to make them more than just namespaces
+
+-- TODO With the new 'def' syntax, we might be able to support some symbols in
+--      method names specifically (x.var=, x.[], etc.)
+
+-- TODO Classes which have a finite and specified number of children
 data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
-            Function SourcePos (Maybe Type) String [([Pattern], Expr)] |
-            -- Name, parent, arguments, variables, fields (TODO Remove 'type')
-            Type SourcePos String [String] Type [(String, Type)] Fields |
-            -- Name, arguments, parents, variables, methods
-            Class SourcePos String [String] [Type] [(String, Type)] [Decl] |
+            Function SourcePos (Maybe Type) String FunctionBody |
+            TypeDecl SourcePos String [String] TypeExpr |
+            -- Name, arguments, parent, variables, methods
+            Class SourcePos String [String] TypeExpr [(String, TypeExpr)] [Decl] |
             -- Name, args, variables
-            Concept SourcePos String [String] Timing [(String, Type)] |
-            Instance SourcePos String [Type] Type [Decl]
+            Concept SourcePos String [String] Context Timing [(String, Type)] |
+            Instance SourcePos String [TypeExpr] Context [Decl] -- TODO Remove arg4
             deriving (Show, Eq)
 
--- ///// Is / Has operators
---       Think about how to handle this; I'm not sure I like this approach with
---       inheritance shoehorned in
-data Type = Tuple SourcePos [Type] Access |
-            Named SourcePos String [Type] Access |
-            Func SourcePos [Type] Type
+-- ///// Unions and intersections and how they'll work with concepts and instances
+
+data Type = Type TypeExpr Context
             deriving (Show, Eq)
+
+-- The type expressions should evaluate to contexts
+newtype Context = Context [TypeExpr]
+    deriving (Show, Eq)
+
+data TypeExpr = TypeOper SourcePos (OpExpr TypeOp TypeExpr) |
+                Tuple SourcePos [TypeExpr] Access |
+                Named SourcePos String [TypeExpr] Access |
+                Func SourcePos [TypeExpr] TypeExpr
+                deriving (Show, Eq)
 
 data Expr = FunctionCall SourcePos Expr [Expr] |
             DotCall SourcePos Expr String [Expr] |
@@ -47,16 +57,17 @@ data Expr = FunctionCall SourcePos Expr [Expr] |
             Literal SourcePos Token |
             TupleExpr SourcePos [Expr] |
             ListExpr SourcePos [Expr] |
-            Declare SourcePos Decl |
+            Declare SourcePos Decl | -- TODO Should this be here?
             VarAsn SourcePos Pattern Expr |
             Subscript SourcePos Expr [Expr] |
             Ident SourcePos String |
-            Oper SourcePos (OpExpr Expr) |
+            Oper SourcePos (OpExpr Op Expr) |
             IfStmt SourcePos IfOp Conditional Expr (Maybe Expr) |
             ForStmt SourcePos ForOp Pattern Expr Expr |
             Case SourcePos Expr [(Pattern, Maybe Expr, Expr)] |
             Cond SourcePos [(Conditional, Expr)] (Maybe Expr) |
-            LetStmt SourcePos [(Pattern, Expr)] Expr |
+            -- Vars, Funcs, Expr
+            LetStmt SourcePos [(Pattern, Expr)] [(String, Maybe Type, FunctionBody)] Expr |
             Lambda SourcePos [String] Expr
             deriving (Show, Eq)
 
@@ -73,9 +84,6 @@ data Conditional = CondExpr Expr |
                    BindExpr Pattern Expr
                    deriving (Show, Eq)
 
-newtype Fields = Fields (Map String Access)
-    deriving (Show, Read, Eq)
-
 data Access = Read | ReadWrite
               deriving (Show, Read, Eq, Ord)
 
@@ -90,10 +98,6 @@ data Call = Paren | Bracket | Dot String
 
 data Timing = Static | Dynamic
             deriving (Show, Read, Eq, Ord)
-
-instance Monoid Fields where
-    mempty = Fields Map.empty
-    (Fields m1) `mappend` (Fields m2) = Fields $ m1 `mappend` m2
 
 parseCode :: String -> [Lexeme] -> Either ParseError FileData
 parseCode = parse file
@@ -142,15 +146,18 @@ functionDecl :: EParser Decl
 functionDecl = do
   keyword "def"
   newlines
+  functionDecl'
+
+functionDecl' :: EParser Decl
+functionDecl' = do
   name <- identifier
-  newlines
   operator "("
   newlines
   args <- sepBy pattern nlComma
   newlines
   operator ")"
-  type_ <- optionMaybe $ operator "::" *> newlines *> typeExpr
-  contents <- Left <$> shortForm <|> Right <$> longForm
+  type_ <- optionMaybe $ operator "::" *> newlines *> typeAndContext
+  contents <- Left <$> funcShortForm <|> Right <$> funcLongForm
   pos <- getPosition
   case contents of
     Left stmt -> return $ Function pos type_ name [(args, stmt)]
@@ -159,44 +166,27 @@ functionDecl = do
             getIdPattern _ = Nothing
             args' = mapM getIdPattern args
         in case args' of
+             Nothing -> fail "invalid pattern in function long form"
              Just args''
                  | null insides -> fail "empty function declaration"
                  | length args'' /= length (fst $ head insides) ->
                      fail "incompatible arglist in function declaration"
                  | otherwise -> return $ Function pos type_ name insides
-   where shortForm = operator "=" *> newlines *> statement
-         longForm = newlines1 *> many (singleForm <* newlines1) <* keyword "end"
-         singleForm = do
-                  operator "("
-                  newlines
-                  args <- sepBy pattern nlComma
-                  newlines
-                  operator ")"
-                  operator "->"
-                  stmt <- statement
-                  return (args, stmt)
 
-{-
-functionDecl :: EParser Decl
-functionDecl = do
-  type_ <- option Nothing $ try (Just <$> typeSpec <* newlines1)
-  name <- identifier
-  type' <- case type_ of
-             Nothing -> return Nothing
-             Just (str, expr)
-                 | str == name -> return $ Just expr
-                 | otherwise -> fail "preceding type declaration should match function"
-  operator "("
-  newlines
-  args <- sepBy identifier nlComma
-  newlines
-  operator ")"
-  operator "="
-  newlines
-  stmt <- statement
-  pos <- getPosition
-  return $ Function pos type' name args stmt
--}
+funcShortForm :: EParser Expr
+funcShortForm = operator "=" *> newlines *> statement
+
+funcLongForm :: EParser [([Pattern], Expr)]
+funcLongForm = newlines1 *> many (singleForm <* newlines1) <* keyword "end"
+    where singleForm = do
+            operator "("
+            newlines
+            args <- sepBy pattern nlComma
+            newlines
+            operator ")"
+            operator "->"
+            stmt <- statement
+            return (args, stmt)
 
 typeDecl :: EParser Decl
 typeDecl = do
@@ -204,13 +194,12 @@ typeDecl = do
   newlines
   name <- identifier
   args <- option [] $ operator "[" *> sepBy identifier nlComma <* operator "]"
-  pos0 <- getPosition
-  parent <- option (Named pos0 "T" [] Read) $ operator "(" *> typeExpr <* operator ")"
-  newlines1
-  (types, fields) <- typeInterior
-  keyword "end"
+  newlines
+  operator "="
+  newlines
+  synonym <- typeExpr
   pos <- getPosition
-  return $ Type pos name args parent types fields
+  return $ TypeDecl pos name args synonym
 
 classDecl :: EParser Decl
 classDecl = do
@@ -219,13 +208,13 @@ classDecl = do
   name <- identifier
   args <- option [] $ operator "[" *> sepBy identifier nlComma <* operator "]"
   pos0 <- getPosition
-  parent <- option [Named pos0 "T" [] Read] $ do
+  parent <- option (Named pos0 "T" [] Read) $ do
               operator "("
               newlines
-              parents <- sepBy typeExpr nlComma
+              parent <- typeExpr
               newlines
               operator ")"
-              return parents
+              return parent
   newlines1
   fields <- classFields
   methods <- classMethods
@@ -241,53 +230,53 @@ classDecl = do
                             return (name, type_)
             classMethods = many $ functionDecl <* newlines1
 
-typeInterior :: EParser ([(String, Type)], Fields)
-typeInterior = do
-  (types, fields) <- partitionEithers <$> endBy typeStatement newlines1
-  return (types, mconcat fields)
-
-typeStatement :: EParser (Either (String, Type) Fields)
-typeStatement = Right <$> fields_ <|> Left <$> type_
-    where type_ = typeSpec
-          fields_ = do
-            keyword "fields"
-            newlines1
-            exprs <- fieldsExpr
-            keyword "end"
-            return exprs
-
-fieldsExpr :: EParser Fields
-fieldsExpr = (Fields . Map.fromList) <$> endBy identifier' newlines1
-    where identifier' = do
-            result <- identifier
-            opt <- accessSuffix
-            return (result, opt)
-
 typeSpec :: EParser (String, Type)
 typeSpec = do
   name <- identifier
   operator "::"
   newlines
-  tpe <- typeExpr
+  tpe <- typeAndContext
   return (name, tpe)
 
-typeExpr :: EParser Type
-typeExpr = try funcTypeExpr <|> try tupleTypeExpr <|> namedTypeExpr <?> "type expression"
+typeAndContext :: EParser Type
+typeAndContext = Type <$> typeExpr <*> option idContext (try $ newlines *> contextExpr)
 
-tupleTypeExpr :: EParser Type
+contextExpr :: EParser Context
+contextExpr = do
+  keyword "where"
+  newlines
+  Context <$> (shortContext <|> longContext)
+      where shortContext = return <$> typeExpr
+            longContext = do
+                operator "("
+                newlines
+                inner <- sepBy typeExpr nlComma
+                newlines
+                operator ")"
+                return inner
+
+typeExpr :: EParser TypeExpr
+typeExpr = TypeOper <$> getPosition <*> typeOperatorExpr typeTerm
+
+typeTerm :: EParser TypeExpr
+typeTerm = try funcTypeExpr <|> try tupleTypeExpr <|> namedTypeExpr <?> "type expression"
+
+-- NOTE: If the length ends up being one, it will return the inner type, NOT a one-tuple.
+tupleTypeExpr :: EParser TypeExpr
 tupleTypeExpr = do
   operator "("
   newlines
   contents <- sepBy typeExpr nlComma
   newlines
   operator ")"
-  when (length contents == 1) $
-       fail "tuple of length 1"
-  access <- accessSuffix
-  pos <- getPosition
-  return $ Tuple pos contents access
+  case contents of
+    [single] -> return single -- Simple grouping parens
+    _ -> do
+      access <- accessSuffix
+      pos <- getPosition
+      return $ Tuple pos contents access
 
-namedTypeExpr :: EParser Type
+namedTypeExpr :: EParser TypeExpr
 namedTypeExpr = do
   name <- dottedIdentifier
   args <- option [] $ do
@@ -301,7 +290,7 @@ namedTypeExpr = do
   pos <- getPosition
   return $ Named pos name args access
 
-funcTypeExpr :: EParser Type
+funcTypeExpr :: EParser TypeExpr
 funcTypeExpr = do
   operator "("
   newlines
@@ -327,11 +316,12 @@ conceptDecl = do
                 newlines
                 operator "]"
                 return args'
+  context <- option idContext $ try (newlines *> contextExpr)
   newlines1
   internals <- endBy typeSpec newlines1
   keyword "end"
   pos <- getPosition
-  return $ Concept pos name args binding internals
+  return $ Concept pos name args context binding internals
 
 instanceDecl :: EParser Decl
 instanceDecl = do
@@ -345,12 +335,12 @@ instanceDecl = do
                 newlines
                 operator "]"
                 return args'
-  impl <- typeExpr
+  context <- option idContext $ try (newlines *> contextExpr)
   newlines1
   internals <- endBy functionDecl newlines1
   keyword "end"
   pos <- getPosition
-  return $ Instance pos name args impl internals
+  return $ Instance pos name args context internals
 
 statement :: EParser Expr
 statement = do
@@ -520,19 +510,27 @@ letExpr = do
   newlines
   -- TODO Optimize out this 'try' without exploding everything
   clauses <- (:) <$> clause <*> many (try $ newlines1 *> clause)
+  let (vars, funcs) = partitionEithers clauses
   newlines
   keyword "in"
   newlines
   expr <- toplevelExpr
   pos <- getPosition
-  return $ LetStmt pos clauses expr
-    where clause = do
+  return $ LetStmt pos vars funcs expr
+    where clause = Left <$> try varClause <|> Right <$> try funcClause
+          -- TODO Factor out the 'try's in 'clause'
+          varClause = do
             ident <- pattern
             newlines
             operator "="
             newlines
             expr <- statement
             return (ident, expr)
+          funcClause = do
+            func <- functionDecl'
+            case func of
+              Function _ type_ name clauses -> return (name, type_, clauses)
+              _ -> unexpected $ show func
 
 -- TODO Lambdas and function declarations should be able to pattern match their
 --      arguments.
@@ -698,6 +696,8 @@ condit = try bindExpr <|> CondExpr <$> toplevelExpr
             expr <- toplevelExpr
             return $ BindExpr lhs expr
 
+-- TODO Try literal patterns (so numbers, etc. don't have to be written
+--      with a caret (^) preceding them)
 pattern :: EParser Pattern
 pattern = try tuplePattern <|> listPattern <|> exprPattern <|>
           UnderscorePattern <$> (matchToken (Identifier "_") *> getPosition) <|>
@@ -738,7 +738,7 @@ exprPattern = ExprPattern <$> getPosition <*> (operator "^" *> newlines *> tople
 
 typePattern :: EParser Pattern
 typePattern = do
-  operator "&"
+  operator "&" -- TODO Find a way (without 'try's everywhere) to remove this ampersand
   newlines
   name <- identifier
   newlines
@@ -764,3 +764,6 @@ dottedIdentifier = do
   first <- identifier
   rest <- many $ operator "." *> identifier
   return $ intercalate "." (first : rest)
+
+idContext :: Context
+idContext = Context []
