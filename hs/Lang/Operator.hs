@@ -25,6 +25,7 @@ prefix op lex = Prefix $ Pre op <$ lex
 postfix :: o -> EParser b -> Operator [Lexeme] () Identity (OpExpr o a)
 postfix op lex = Postfix $ flip Post op <$ lex
 
+binary :: Assoc -> o -> EParser b -> Operator [Lexeme] () Identity (OpExpr o a)
 binary assoc op lex = flip Infix assoc $ (\x y -> Inf x op y) <$ lex <* newlines
 
 -- TODO Add in (<|) and (|>) for function composition
