@@ -48,7 +48,7 @@ instance Lispable Decl where
     -- (concept pos name (&rest args) ctx timing &rest vars)
     --   ; where vars is a list of (name type)
     -- (instance pos name (&rest args) ctx &rest vars)
-    -- (class pos name (&rest args) (&rest parents) (&rest vars) methods)
+    -- (class pos name (&rest args) parent (&rest vars) methods)
     --   ; where vars is a list of (name type)
     lispify (Include pos name hiding) =
         List $ [Symbol "include", lispify pos, Atom name, List $ map Atom hiding]
@@ -77,9 +77,9 @@ instance Lispable Decl where
         List $ [Symbol "instance", lispify pos, Atom name,
                 List $ map lispify args, lispify ctx]
                  ++ map lispify vars
-    lispify (Class pos name args parents vars methods) =
+    lispify (Class pos name args parent vars methods) =
         List $ [Symbol "class", lispify pos, Atom name, List $ map Atom args,
-                List $ map lispify parents, List $ map lispify' vars,
+                lispify parent, List $ map lispify' vars,
                 List $ map lispify methods]
 
 instance Lispable Type where

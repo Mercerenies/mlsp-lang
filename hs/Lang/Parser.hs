@@ -29,8 +29,8 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
             Function SourcePos (Maybe Type) String FunctionBody |
             TypeDecl SourcePos String [String] TypeExpr |
-            -- Name, arguments, parents, variables, methods
-            Class SourcePos String [String] [TypeExpr] [(String, TypeExpr)] [Decl] |
+            -- Name, arguments, parent, variables, methods
+            Class SourcePos String [String] TypeExpr [(String, TypeExpr)] [Decl] |
             -- Name, args, variables
             Concept SourcePos String [String] Context Timing [(String, Type)] |
             Instance SourcePos String [TypeExpr] Context [Decl] -- TODO Remove arg4
@@ -208,13 +208,13 @@ classDecl = do
   name <- identifier
   args <- option [] $ operator "[" *> sepBy identifier nlComma <* operator "]"
   pos0 <- getPosition
-  parent <- option [Named pos0 "T" [] Read] $ do
+  parent <- option (Named pos0 "T" [] Read) $ do
               operator "("
               newlines
-              parents <- sepBy typeExpr nlComma
+              parent <- typeExpr
               newlines
               operator ")"
-              return parents
+              return parent
   newlines1
   fields <- classFields
   methods <- classMethods
