@@ -14,7 +14,8 @@ class XYZ[$1]
   @z :: Int
 end
 
-class XYZ2[$1] (XYZ[$1])
+class XYZ2[$1]
+  {parent XYZ[$1]}
   @something :: ($1, $1)
 end
 

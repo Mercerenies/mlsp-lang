@@ -48,8 +48,9 @@ instance Lispable Decl where
     --   ; where vars is a list of (name type)
     -- (generic pos name type)
     -- (instance pos name (&rest args) ctx &rest vars)
-    -- (class pos name (&rest args) parent &body body)
+    -- (class pos name (&rest args) parent (&optional (&rest children)) abstr &body body)
     -- (meta pos &rest body)
+    -- (meta-expr pos meta)
     lispify (Include pos name hiding) =
         List $ [Symbol "include", lispify pos, Atom name, List $ map Atom hiding]
     lispify (Import pos name hiding) =
@@ -73,13 +74,18 @@ instance Lispable Decl where
         List $ [Symbol "instance", lispify pos, Atom name,
                 List $ map lispify args, lispify ctx]
                  ++ map lispify vars
-    lispify (Class pos name args parent inner) =
+    lispify (Class pos name args parent children abstr inner) =
         List $ [Symbol "class", lispify pos, Atom name, List $ map Atom args,
-                lispify parent] ++ map lispify inner
+                lispify parent, children', lispify abstr] ++ map lispify inner
+            where children' = case children of
+                                Nothing -> List []
+                                Just xs -> List [List $ map lispify xs]
     lispify (Meta pos func) =
         case lispify func of
           List xs -> List $ [Symbol "meta", lispify pos] ++ xs
           _ -> List [Symbol "meta"]
+    lispify (MetaDeclare pos decl) =
+        List $ [Symbol "meta-expr", lispify pos, lispify decl]
 
 instance Lispable FunctionDecl where
     -- (name (&optional type) &rest cases)
@@ -94,12 +100,15 @@ instance Lispable FunctionDecl where
 instance Lispable ClassDecl where
     -- (field pos name type)
     -- (method pos &rest body)
+    -- (meta-expr pos expr)
     lispify (Field pos name type_) =
         List $ [Symbol "field", lispify pos, Atom name, lispify type_]
     lispify (Method pos func) =
         case lispify func of
           List xs -> List $ [Symbol "method", lispify pos] ++ xs
           _ -> List [Symbol "method"]
+    lispify (MetaDeclClass pos decl) =
+        List $ [Symbol "meta-expr", lispify pos, lispify decl]
 
 instance Lispable Type where
     -- (with-context type context)
@@ -145,6 +154,7 @@ instance Lispable Expr where
     --   ; where vars are (ptn expr), funcs are (name (&optional type) &rest impl), and
     --   ;       impl are ((&rest ptn) stmt)
     -- (lambda pos (&rest args) expr)
+    -- (meta-expr pos expr)
     lispify (FunctionCall pos expr args) =
         List $ [Symbol "call", lispify pos, lispify expr] ++ map lispify args
     lispify (DotCall pos expr string args) =
@@ -196,6 +206,12 @@ instance Lispable Expr where
                    doImpl (ptns, expr) = List [List $ map lispify ptns, lispify expr]
     lispify (Lambda pos args expr) =
         List $ [Symbol "lambda", lispify pos, List $ map Atom args, lispify expr]
+    lispify (MetaExpr pos decl) =
+        List $ [Symbol "meta-expr", lispify pos, lispify decl]
+
+instance Lispable MetaCall where
+    -- (meta name &rest args)
+    lispify (MetaCall str args) = List $ [Symbol "meta", Atom str] ++ map lispify args
 
 instance Lispable Literal where
     -- (literal type &rest contents)
@@ -302,6 +318,12 @@ instance Lispable Pattern where
         List $ [Symbol "pattern-expr", lispify pos, lispify expr]
     lispify (UnderscorePattern pos) =
         List $ [Symbol "pattern-underscore", lispify pos]
+
+instance Lispable Bool where
+    -- true
+    -- false
+    lispify True = Symbol "true"
+    lispify False = Symbol "false"
 
 instance Lispable a => Lispable [a] where
     lispify = List . map lispify

@@ -6,3 +6,5 @@ class Test
 end
 
 meta identity(x) = x
+
+{identity 7}

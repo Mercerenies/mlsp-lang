@@ -14,4 +14,5 @@ def f(x) = begin
   b -= 2
   c &&= 1
   d ||= 2
+  {parent0 0 1 2 ee}
 end

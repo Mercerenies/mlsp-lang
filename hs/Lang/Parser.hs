@@ -1,7 +1,9 @@
 module Lang.Parser(FileData(..), Decl(..), Type(..), TypeExpr(..), Context(..), Expr(..),
                    Conditional(..), Pattern(..), Literal(..), FunctionDecl(..),
-                   ClassDecl(..), Access(..), IfOp(..), ForOp(..), Call(..),
+                   ClassDecl(..), Access(..), IfOp(..), ForOp(..), Call(..), MetaCall(..),
                    parseCode, file, toplevel) where
+
+-- TODO Consider making SourcePos a monad rather than a property of EVERYTHING
 
 import Lang.Tokens
 import Lang.Operator
@@ -31,17 +33,19 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
             Function SourcePos FunctionDecl |
             TypeDecl SourcePos String [String] TypeExpr |
-            -- Name, arguments, parent, variables, methods
-            Class SourcePos String [String] TypeExpr [ClassDecl] |
+            -- Name, arguments, parent, children, abstract, variables, methods
+            Class SourcePos String [String] TypeExpr (Maybe [TypeExpr]) Bool [ClassDecl] |
             -- Name, args, variables
             Concept SourcePos String [String] Context [(String, Type)] |
             Instance SourcePos String [TypeExpr] Context [Decl] |
             Generic SourcePos String Type |
-            Meta SourcePos FunctionDecl
+            Meta SourcePos FunctionDecl |
+            MetaDeclare SourcePos MetaCall
             deriving (Show, Eq)
 
 data ClassDecl = Field SourcePos String TypeExpr |
-                 Method SourcePos FunctionDecl
+                 Method SourcePos FunctionDecl |
+                 MetaDeclClass SourcePos MetaCall
                  deriving (Show, Eq)
 
 data FunctionDecl = FunctionDecl (Maybe Type) String FunctionBody
@@ -76,7 +80,8 @@ data Expr = FunctionCall SourcePos Expr [Expr] |
             Cond SourcePos [(Conditional, Expr)] (Maybe Expr) |
             -- Vars, Funcs, Expr
             LetStmt SourcePos [(Pattern, Expr)] [(String, Maybe Type, FunctionBody)] Expr |
-            Lambda SourcePos [String] Expr
+            Lambda SourcePos [String] Expr |
+            MetaExpr SourcePos MetaCall
             deriving (Show, Eq)
 
 data Literal = LReMatch String |
@@ -95,6 +100,14 @@ data Pattern = TuplePattern SourcePos [Pattern] |
                ExprPattern SourcePos Expr |
                UnderscorePattern SourcePos
                deriving (Show, Eq)
+
+data MetaCall = MetaCall String [Token]
+                deriving (Show, Eq)
+
+data MetaSpecial = Parent TypeExpr |
+                   Children [TypeExpr] |
+                   Abstract
+                   deriving (Show, Eq)
 
 data Conditional = CondExpr Expr |
                    BindExpr Pattern Expr
@@ -129,7 +142,7 @@ file = do
 toplevel :: EParser Decl
 toplevel = moduleDecl <|> functionDecl <|> typeDecl <|>
            conceptDecl <|> instanceDecl <|> importInclude <|>
-           classDecl <|> genericDecl <|> metaDecl
+           classDecl <|> genericDecl <|> metaDecl <|> metaDeclCall
 
 importInclude :: EParser Decl
 importInclude = do
@@ -169,6 +182,16 @@ genericDecl = do
   expr <- typeAndContext
   pos <- getPosition
   return $ Generic pos name expr
+
+metaDeclCall :: EParser Decl
+metaDeclCall = do
+  mc <- metaCall
+  pos <- getPosition
+  case mc of
+    Left x -> return $ MetaDeclare pos x
+    Right (Parent {}) -> unexpected "parent declaration" <?> "meta call"
+    Right (Children {}) -> unexpected "children declaration" <?> "meta call"
+    Right (Abstract {}) -> unexpected "abstract declaration" <?> "meta call"
 
 metaDecl :: EParser Decl
 metaDecl = do
@@ -241,30 +264,37 @@ classDecl = do
   name <- identifier
   args <- option [] $ operator "[" *> sepBy identifier nlComma <* operator "]"
   pos0 <- getPosition
-  parent <- option (Named pos0 "T" [] Read) $ do
-              operator "("
-              newlines
-              parent <- typeExpr
-              newlines
-              operator ")"
-              return parent
   newlines1
-  inner <- many $ classMethod <|> classField
+  contents <- many $ (classMethod <|> classMeta <|> classField) <* newlines1
+  let (inner, parent, children, abstract) = foldl process init contents
+      parent' = maybe (Named pos0 "T" [] Read) id parent
   keyword "end"
   pos <- getPosition
-  return $ Class pos name args parent inner
+  return $ Class pos name args parent' children abstract (inner [])
       where classField = do
               name <- identifier
               operator "::"
               newlines
               type_ <- typeExpr
               pos <- getPosition
-              newlines1
-              return $ Field pos name type_
+              return $ Left (Field pos name type_)
             classMethod = do
                            keyword "def"
                            newlines
-                           Method <$> getPosition <*> functionDecl' <* newlines1
+                           decl <- functionDecl'
+                           pos <- getPosition
+                           return $ Left (Method pos decl)
+            classMeta = metaCall >>= \mc ->
+                        case mc of
+                          Left call -> (\x -> Left $ MetaDeclClass x call) <$> getPosition
+                          Right (Parent expr) -> return . Right $ Parent expr
+                          Right (Children expr) -> return . Right $ Children expr
+                          Right Abstract -> return $ Right Abstract
+            init = (id, Nothing, Nothing, False)
+            process (a, _, c, d) (Right (Parent expr)) = (a, Just expr, c, d)
+            process (a, b, _, d) (Right (Children expr)) = (a, b, Just expr, d)
+            process (a, b, c, _) (Right Abstract) = (a, b, c, True)
+            process (a, b, c, d) (Left decl) = (a . (decl :), b, c, d)
 
 typeSpec :: EParser (String, Type)
 typeSpec = do
@@ -425,9 +455,19 @@ basicExpr = Oper <$> getPosition <*> operatorExpr basicTerm <?> "basic expressio
 
 basicTerm :: EParser Expr
 basicTerm = beginEndExpr <|> ifExpr <|> forExpr <|> caseExpr <|> condExpr <|>
-            letExpr <|> lambdaExpr <|> try varAsn <|>
+            letExpr <|> lambdaExpr <|> try varAsn <|> metaExpr <|>
             literalExpr <|> listExpr <|> try tupleExpr <|>
             parenExpr <|> try callExpr
+
+metaExpr :: EParser Expr
+metaExpr = do
+  mc <- metaCall
+  pos <- getPosition
+  case mc of
+    Left x -> return $ MetaExpr pos x
+    Right (Parent {}) -> unexpected "parent declaration" <?> "meta call"
+    Right (Children {}) -> unexpected "children declaration" <?> "meta call"
+    Right (Abstract {}) -> unexpected "abstract declaration" <?> "meta call"
 
 beginEndExpr :: EParser Expr
 beginEndExpr = do
@@ -786,8 +826,39 @@ typePattern = do
 idPattern :: EParser Pattern
 idPattern = IdPattern <$> getPosition <*> identifier
 
+-- TODO Desugar this immediately
 accessSuffix :: EParser Access
 accessSuffix = option Read $ ReadWrite <$ operator "!"
+
+metaCall :: EParser (Either MetaCall MetaSpecial)
+metaCall = do
+  operator "{"
+  newlines
+  next <- anyToken
+  result <- case next of
+              Token (Identifier "parent") _ ->
+                  (Right . Parent) <$> (newlines *> typeExpr)
+              Token (Identifier "children") _ ->
+                  (Right . Children) <$> (newlines *> sepBy typeExpr nlComma)
+              Token (Identifier "abstract") _ ->
+                  pure $ Right Abstract
+              Token (Identifier str) _ -> Left <$> inner str
+              _ -> unexpected (show next) <?> "meta identifier"
+  operator "}"
+  return result
+   where inner name = MetaCall name <$> option [] readArgs
+         readArgs = do
+              next <- satisfy $ \x -> case x of
+                                        Token (Operator "}") _ -> False
+                                        _ -> True
+              case next of
+                Token (Operator "{") _ -> do
+                          inside <- option [] readArgs
+                          operator "}"
+                          outside <- option [] readArgs
+                          return $ [Operator "{"] ++ inside ++ [Operator "}"] ++ outside
+                Token x _ -> (x :) <$> option [] readArgs
+                Newline -> option [] readArgs
 
 nlComma :: EParser ()
 nlComma = void $ operator "," <* newlines
