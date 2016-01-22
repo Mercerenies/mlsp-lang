@@ -71,9 +71,9 @@ operator op = matchToken (Operator op) <?> "operator '" ++ op ++ "'"
 
 keywords :: [String]
 keywords = ["package", "import", "include", "hiding", "module", "type", "begin", "end",
-            "concept", "instance", "fields", "if", "then", "else", "unless",
+            "concept", "instance", "if", "then", "else", "unless",
             "in", "case", "when", "cond", "for", "generic", "let", "class", "def",
-            "where"]
+            "where", "meta"]
 
 operators :: [String]
 operators = ["+=", "-=", "*=", "/=", "==", "<=", ">=", "&&=", "||=", "&&", "||",

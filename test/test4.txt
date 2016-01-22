@@ -4,3 +4,5 @@ class Test
   g :: Double
   def function(x) :: (Int) -> Int = 1
 end
+
+meta identity(x) = x

@@ -51,6 +51,8 @@ instance Lispable Decl where
     -- (instance pos name (&rest args) ctx &rest vars)
     -- (class pos name (&rest args) parent (&rest vars) methods)
     --   ; where vars is a list of (name type)
+    -- (meta pos name (&optional type) &rest cases)
+    --   ; where cases is a list of ((&rest pattern) stmt)
     lispify (Include pos name hiding) =
         List $ [Symbol "include", lispify pos, Atom name, List $ map Atom hiding]
     lispify (Import pos name hiding) =
@@ -81,6 +83,10 @@ instance Lispable Decl where
         List $ [Symbol "class", lispify pos, Atom name, List $ map Atom args,
                 lispify parent, List $ map lispify' vars,
                 List $ map lispify methods]
+    lispify (Meta pos type_ name insides) =
+        case lispify (Function pos type_ name insides) of
+          List (_:xs) -> List $ Atom "meta" : xs
+          _ -> List [Atom "meta"]
 
 instance Lispable Type where
     -- (with-context type context)

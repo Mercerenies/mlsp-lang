@@ -36,7 +36,8 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             -- Name, args, variables
             Concept SourcePos String [String] Context [(String, Type)] |
             Instance SourcePos String [TypeExpr] Context [Decl] |
-            Generic SourcePos String Type
+            Generic SourcePos String Type |
+            Meta SourcePos (Maybe Type) String FunctionBody
             deriving (Show, Eq)
 
 data Type = Type TypeExpr Context
@@ -121,7 +122,7 @@ file = do
 toplevel :: EParser Decl
 toplevel = moduleDecl <|> functionDecl <|> typeDecl <|>
            conceptDecl <|> instanceDecl <|> importInclude <|>
-           classDecl <|> genericDecl
+           classDecl <|> genericDecl <|> metaDecl
 
 importInclude :: EParser Decl
 importInclude = do
@@ -161,6 +162,15 @@ genericDecl = do
   expr <- typeAndContext
   pos <- getPosition
   return $ Generic pos name expr
+
+metaDecl :: EParser Decl
+metaDecl = do
+  keyword "meta"
+  newlines
+  decl <- functionDecl'
+  case decl of
+    Function pos type_ name inner -> return $ Meta pos type_ name inner
+    _ -> unexpected (show decl) <?> "function definition"
 
 functionDecl :: EParser Decl
 functionDecl = do
