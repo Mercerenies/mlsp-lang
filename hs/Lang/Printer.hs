@@ -41,31 +41,25 @@ instance Lispable Decl where
     -- (include pos name (&rest hiding))
     -- (import pos name (&rest hiding))
     -- (module pos name &body rest)
-    -- (function pos name (&optional type) &rest cases)
-    --   ; where cases is a list of ((&rest pattern) stmt)
+    -- (function pos &rest body)
     -- (type pos name (&rest args) synonym)
     --   ; where vars is a list of (name type)
     -- (concept pos name (&rest args) ctx &rest vars)
     --   ; where vars is a list of (name type)
     -- (generic pos name type)
     -- (instance pos name (&rest args) ctx &rest vars)
-    -- (class pos name (&rest args) parent (&rest vars) methods)
-    --   ; where vars is a list of (name type)
-    -- (meta pos name (&optional type) &rest cases)
-    --   ; where cases is a list of ((&rest pattern) stmt)
+    -- (class pos name (&rest args) parent &body body)
+    -- (meta pos &rest body)
     lispify (Include pos name hiding) =
         List $ [Symbol "include", lispify pos, Atom name, List $ map Atom hiding]
     lispify (Import pos name hiding) =
         List $ [Symbol "import", lispify pos, Atom name, List $ map Atom hiding]
     lispify (Module pos name internals) =
         List $ [Symbol "module", lispify pos, Atom name] ++ map lispify internals
-    lispify (Function pos type_ name insides) =
-        List $ [Symbol "function", lispify pos, Atom name, optionalType]
-               ++ map translateInside insides
-        where optionalType = case type_ of
-                               Just x -> List [lispify x]
-                               Nothing -> List []
-              translateInside (ptn, stmt) = List [List $ map lispify ptn, lispify stmt]
+    lispify (Function pos func) =
+        case lispify func of
+          List xs -> List $ [Symbol "function", lispify pos] ++ xs
+          _ -> List [Symbol "function"]
     lispify (TypeDecl pos name args synonym) =
         List $ [Symbol "type", lispify pos, Atom name, List $ map Atom args,
                 lispify synonym]
@@ -79,14 +73,33 @@ instance Lispable Decl where
         List $ [Symbol "instance", lispify pos, Atom name,
                 List $ map lispify args, lispify ctx]
                  ++ map lispify vars
-    lispify (Class pos name args parent vars methods) =
+    lispify (Class pos name args parent inner) =
         List $ [Symbol "class", lispify pos, Atom name, List $ map Atom args,
-                lispify parent, List $ map lispify' vars,
-                List $ map lispify methods]
-    lispify (Meta pos type_ name insides) =
-        case lispify (Function pos type_ name insides) of
-          List (_:xs) -> List $ Atom "meta" : xs
-          _ -> List [Atom "meta"]
+                lispify parent] ++ map lispify inner
+    lispify (Meta pos func) =
+        case lispify func of
+          List xs -> List $ [Symbol "meta", lispify pos] ++ xs
+          _ -> List [Symbol "meta"]
+
+instance Lispable FunctionDecl where
+    -- (name (&optional type) &rest cases)
+    --   ; where cases is a list of ((&rest pattern) stmt)
+    lispify (FunctionDecl type_ name insides) =
+        List $ [Atom name, optionalType] ++ map translateInside insides
+        where optionalType = case type_ of
+                               Just x -> List [lispify x]
+                               Nothing -> List []
+              translateInside (ptn, stmt) = List [List $ map lispify ptn, lispify stmt]
+
+instance Lispable ClassDecl where
+    -- (field pos name type)
+    -- (method pos &rest body)
+    lispify (Field pos name type_) =
+        List $ [Symbol "field", lispify pos, Atom name, lispify type_]
+    lispify (Method pos func) =
+        case lispify func of
+          List xs -> List $ [Symbol "method", lispify pos] ++ xs
+          _ -> List [Symbol "method"]
 
 instance Lispable Type where
     -- (with-context type context)
@@ -94,7 +107,7 @@ instance Lispable Type where
 
 instance Lispable Context where
     -- (context &rest types)
-    lispify (Context ctx) = List $ Atom "context" : map lispify ctx
+    lispify (Context ctx) = List $ Symbol "context" : map lispify ctx
 
 instance Lispable TypeExpr where
     -- (op pos expr)

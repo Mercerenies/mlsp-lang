@@ -1,6 +1,6 @@
 module Lang.Parser(FileData(..), Decl(..), Type(..), TypeExpr(..), Context(..), Expr(..),
-                   Conditional(..), Pattern(..), Literal(..),
-                   Access(..), IfOp(..), ForOp(..), Call(..), Timing(..),
+                   Conditional(..), Pattern(..), Literal(..), FunctionDecl(..),
+                   ClassDecl(..), Access(..), IfOp(..), ForOp(..), Call(..),
                    parseCode, file, toplevel) where
 
 import Lang.Tokens
@@ -29,16 +29,23 @@ type FunctionBody = [([Pattern], Expr)]
 data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
-            Function SourcePos (Maybe Type) String FunctionBody |
+            Function SourcePos FunctionDecl |
             TypeDecl SourcePos String [String] TypeExpr |
             -- Name, arguments, parent, variables, methods
-            Class SourcePos String [String] TypeExpr [(String, TypeExpr)] [Decl] |
+            Class SourcePos String [String] TypeExpr [ClassDecl] |
             -- Name, args, variables
             Concept SourcePos String [String] Context [(String, Type)] |
             Instance SourcePos String [TypeExpr] Context [Decl] |
             Generic SourcePos String Type |
-            Meta SourcePos (Maybe Type) String FunctionBody
+            Meta SourcePos FunctionDecl
             deriving (Show, Eq)
+
+data ClassDecl = Field SourcePos String TypeExpr |
+                 Method SourcePos FunctionDecl
+                 deriving (Show, Eq)
+
+data FunctionDecl = FunctionDecl (Maybe Type) String FunctionBody
+                    deriving (Show, Eq)
 
 data Type = Type TypeExpr Context
             deriving (Show, Eq)
@@ -167,18 +174,15 @@ metaDecl :: EParser Decl
 metaDecl = do
   keyword "meta"
   newlines
-  decl <- functionDecl'
-  case decl of
-    Function pos type_ name inner -> return $ Meta pos type_ name inner
-    _ -> unexpected (show decl) <?> "function definition"
+  Meta <$> getPosition <*> functionDecl'
 
 functionDecl :: EParser Decl
 functionDecl = do
   keyword "def"
   newlines
-  functionDecl'
+  Function <$> getPosition <*> functionDecl'
 
-functionDecl' :: EParser Decl
+functionDecl' :: EParser FunctionDecl
 functionDecl' = do
   name <- identifier
   operator "("
@@ -188,9 +192,8 @@ functionDecl' = do
   operator ")"
   type_ <- optionMaybe $ operator "::" *> newlines *> typeAndContext
   contents <- Left <$> funcShortForm <|> Right <$> funcLongForm
-  pos <- getPosition
   case contents of
-    Left stmt -> return $ Function pos type_ name [(args, stmt)]
+    Left stmt -> return $ FunctionDecl type_ name [(args, stmt)]
     Right insides ->
         let getIdPattern (IdPattern _ x) = Just x
             getIdPattern _ = Nothing
@@ -201,7 +204,7 @@ functionDecl' = do
                  | null insides -> fail "empty function declaration"
                  | length args'' /= length (fst $ head insides) ->
                      fail "incompatible arglist in function declaration"
-                 | otherwise -> return $ Function pos type_ name insides
+                 | otherwise -> return $ FunctionDecl type_ name insides
 
 funcShortForm :: EParser Expr
 funcShortForm = operator "=" *> newlines *> statement
@@ -246,19 +249,22 @@ classDecl = do
               operator ")"
               return parent
   newlines1
-  (fields, methods) <- partitionEithers <$>
-                       (many $ Right <$> classMethod <|> Left <$> classField)
+  inner <- many $ classMethod <|> classField
   keyword "end"
   pos <- getPosition
-  return $ Class pos name args parent fields methods
+  return $ Class pos name args parent inner
       where classField = do
               name <- identifier
               operator "::"
               newlines
               type_ <- typeExpr
+              pos <- getPosition
               newlines1
-              return (name, type_)
-            classMethod = functionDecl <* newlines1
+              return $ Field pos name type_
+            classMethod = do
+                           keyword "def"
+                           newlines
+                           Method <$> getPosition <*> functionDecl' <* newlines1
 
 typeSpec :: EParser (String, Type)
 typeSpec = do
@@ -556,10 +562,8 @@ letExpr = do
             expr <- statement
             return (ident, expr)
           funcClause = do
-            func <- functionDecl'
-            case func of
-              Function _ type_ name clauses -> return (name, type_, clauses)
-              _ -> unexpected $ show func
+            FunctionDecl type_ name clauses <- functionDecl'
+            return (name, type_, clauses)
 
 -- TODO Lambdas and function declarations should be able to pattern match their
 --      arguments.
