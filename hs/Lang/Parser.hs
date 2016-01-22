@@ -24,7 +24,8 @@ type FunctionBody = [([Pattern], Expr)]
 -- TODO With the new 'def' syntax, we might be able to support some symbols in
 --      method names specifically (x.var=, x.[], etc.)
 
--- TODO Classes which have a finite and specified number of children
+-- TODO Classes which have a finite and specified number of children /////
+-- TODO Also, abstract base classes should be possible
 data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
@@ -235,19 +236,19 @@ classDecl = do
               operator ")"
               return parent
   newlines1
-  fields <- classFields
-  methods <- classMethods
+  (fields, methods) <- partitionEithers <$>
+                       (many $ Right <$> classMethod <|> Left <$> classField)
   keyword "end"
   pos <- getPosition
   return $ Class pos name args parent fields methods
-      where classFields = many $ do
-                            name <- identifier
-                            operator "::"
-                            newlines
-                            type_ <- typeExpr
-                            newlines1
-                            return (name, type_)
-            classMethods = many $ functionDecl <* newlines1
+      where classField = do
+              name <- identifier
+              operator "::"
+              newlines
+              type_ <- typeExpr
+              newlines1
+              return (name, type_)
+            classMethod = functionDecl <* newlines1
 
 typeSpec :: EParser (String, Type)
 typeSpec = do
