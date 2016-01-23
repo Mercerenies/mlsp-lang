@@ -1,4 +1,4 @@
-module Lang.Identifier where
+module Lang.Identifier(PackageName, SymbolicName(..), translateName, toPackageName) where
 
 import Lang.Util
 
