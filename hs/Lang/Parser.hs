@@ -26,8 +26,6 @@ type FunctionBody = [([Pattern], Expr)]
 -- TODO With the new 'def' syntax, we might be able to support some symbols in
 --      method names specifically (x.var=, x.[], etc.)
 
--- TODO Classes which have a finite and specified number of children /////
--- TODO Also, abstract base classes should be possible
 data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |
@@ -160,6 +158,8 @@ importInclude = do
                   return inside
   pos <- getPosition
   return $ constr pos name hiding
+
+-- TODO Make include and module do something
 
 moduleDecl :: EParser Decl
 moduleDecl = do
