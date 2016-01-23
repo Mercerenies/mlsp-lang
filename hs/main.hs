@@ -1,7 +1,7 @@
 -- Based on MLSP5.txt
 
 import Lang.Printer
-import Lang.Identifier -- TODO Remove this; it's just to make the module load for testing
+import Lang.Loader
 import Lang.Reader
 import Lang.Options
 import System.Environment

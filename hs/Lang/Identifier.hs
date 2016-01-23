@@ -2,6 +2,8 @@ module Lang.Identifier where
 
 import Lang.Util
 
+type PackageName = [String]
+
 data SymbolicName a = QualifiedName [SymbolicName a] |
                       BasicName a |
                       AtSign a |
@@ -17,3 +19,10 @@ translateName str
                     ('$':xs) -> DollarSign xs
                     ('%':xs) -> PercentSign xs
                     _ -> BasicName str
+
+toPackageName :: String -> Maybe [String]
+toPackageName str = case translateName str of
+                      QualifiedName xs -> mapM getBasicName xs
+                      _ -> Nothing
+    where getBasicName (BasicName x) = Just x
+          getBasicName _ = Nothing

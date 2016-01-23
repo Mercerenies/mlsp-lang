@@ -1,16 +1,15 @@
 module Lang.Reader(parseFile, liftError) where
 
+import Control.Monad.Trans
 import Control.Monad.Trans.Except
 import Control.Arrow
 import Lang.Lexer(scan)
 import Lang.Parser
+import Lang.Error
 
-liftError :: (Monad m, Show e) => Either e a -> ExceptT String m a
-liftError = ExceptT . return . left show
-
-parseFile :: FilePath -> ExceptT String IO FileData
+parseFile :: FilePath -> ExceptT LangError IO FileData
 parseFile file = do
-  code <- ExceptT $ Right <$> readFile file
-  lex <- liftError $ scan file code
-  exp <- liftError $ parseCode file lex
+  code <- lift $ readFile file
+  lex <- liftParseError $ scan file code
+  exp <- liftParseError $ parseCode file lex
   return exp
