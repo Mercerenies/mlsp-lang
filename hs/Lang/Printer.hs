@@ -302,6 +302,7 @@ instance Lispable Pattern where
     -- (pattern-type pos name &rest args)
     -- (pattern-expr pos expr)
     -- (pattern-underscore pos)
+    -- (pattern-meta pos expr)
     lispify (TuplePattern pos args) =
         List $ [Symbol "pattern-tuple", lispify pos] ++ map lispify args
     lispify (ListPattern pos args) =
@@ -318,6 +319,8 @@ instance Lispable Pattern where
         List $ [Symbol "pattern-expr", lispify pos, lispify expr]
     lispify (UnderscorePattern pos) =
         List $ [Symbol "pattern-underscore", lispify pos]
+    lispify (MetaPattern pos expr) =
+        List $ [Symbol "pattern-meta", lispify pos, lispify expr]
 
 instance Lispable Bool where
     -- true

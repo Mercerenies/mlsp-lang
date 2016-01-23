@@ -4,6 +4,7 @@ def f(x) = case x
     vvv
   when &Z[y]
     www
+  when {im a { nested } pattern} then hello()
   when _ then xyz
 end
 def f(x) = for x = 1

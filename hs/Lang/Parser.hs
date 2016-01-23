@@ -98,7 +98,8 @@ data Pattern = TuplePattern SourcePos [Pattern] |
                IdPattern SourcePos String |
                TypePattern SourcePos String [Pattern] |
                ExprPattern SourcePos Expr |
-               UnderscorePattern SourcePos
+               UnderscorePattern SourcePos |
+               MetaPattern SourcePos MetaCall
                deriving (Show, Eq)
 
 data MetaCall = MetaCall String [Token]
@@ -774,7 +775,17 @@ condit = try bindExpr <|> CondExpr <$> toplevelExpr
 pattern :: EParser Pattern
 pattern = try tuplePattern <|> listPattern <|> exprPattern <|>
           UnderscorePattern <$> (matchToken (Identifier "_") *> getPosition) <|>
-          try typePattern <|> idPattern <?> "pattern"
+          try typePattern <|> metaPattern <|> idPattern <?> "pattern"
+
+metaPattern :: EParser Pattern
+metaPattern = do
+  mc <- metaCall
+  pos <- getPosition
+  case mc of
+    Left x -> return $ MetaPattern pos x
+    Right (Parent {}) -> unexpected "parent declaration" <?> "meta call"
+    Right (Children {}) -> unexpected "children declaration" <?> "meta call"
+    Right (Abstract {}) -> unexpected "abstract declaration" <?> "meta call"
 
 tuplePattern :: EParser Pattern
 tuplePattern = do
