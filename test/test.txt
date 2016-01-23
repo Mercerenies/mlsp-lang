@@ -2,10 +2,6 @@ package test
 
 import something.SomethingElse
 
-module TestModule
-
-include SureWhyNot hiding (Blah)
-
 ## Comment
 
 class XYZ[$1]
@@ -52,6 +48,4 @@ end
 def testCases(x) :: (List[$a]) -> (List[$a], Int)
   ([]) -> ([], 1)
   ([x, xs...]) -> (xs, 1)
-end
-
 end
