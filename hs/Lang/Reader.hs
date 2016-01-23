@@ -1,4 +1,4 @@
-module Lang.Reader(parseFile) where
+module Lang.Reader(parseFile, liftError) where
 
 import Control.Monad.Trans.Except
 import Control.Arrow
