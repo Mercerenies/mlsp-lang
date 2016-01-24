@@ -31,7 +31,11 @@ main = do
               putStrLn $ usageInfo header options
     Right (DoCompile Nothing _, _) -> do
               die $ "No input files\n" ++ errorHeader
-    Right (DoCompile (Just inp) out, _) -> do
+    Right (DoParse Nothing _, _) -> do
+              die $ "No input files\n" ++ errorHeader
+    Right (DoCompile (Just _) _, _) -> do
+              die $ "Cannot perform compile step; not yet implemented\n" ++ errorHeader
+    Right (DoParse (Just inp) out, _) -> do
               result <- runExceptT $ parseFile inp
               case result of
                 Left err -> die $ show err

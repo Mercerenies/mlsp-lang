@@ -2,7 +2,6 @@ module Lang.Reader(parseFile, liftError) where
 
 import Control.Monad.Trans
 import Control.Monad.Trans.Except
-import Control.Arrow
 import Lang.Lexer(scan)
 import Lang.Parser
 import Lang.Error

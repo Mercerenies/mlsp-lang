@@ -8,24 +8,32 @@ data In = StdIn |
           deriving (Show, Read, Eq, Ord)
 
 data Opt = DoCompile (Maybe FilePath) Output |
+           DoParse (Maybe FilePath) Output |
            Help
            deriving (Show, Read, Eq)
 
 inputFile :: String -> Opt -> Opt
 inputFile file (DoCompile _ output) = DoCompile (Just file) output
+inputFile file (DoParse _ output) = DoParse (Just file) output
 inputFile _ opt = opt
 
 outputFile :: Maybe String -> Opt -> Opt
 outputFile file (DoCompile input _) = DoCompile input $ maybeToOutput file
+outputFile file (DoParse input _) = DoParse input $ maybeToOutput file
 outputFile _ opt = opt
 
 helpOption :: Opt -> Opt
 helpOption = const Help
 
+parseOnly :: Opt -> Opt
+parseOnly (DoCompile a b) = DoParse a b
+parseOnly opt = opt
+
 options :: [OptDescr (Opt -> Opt)]
 options = [
   Option ['c'] ["compile"] (ReqArg inputFile "FILE") "input FILE",
   Option ['o'] ["output"] (OptArg outputFile "FILE") "output FILE",
+  Option ['p'] ["parse"] (NoArg parseOnly) "only perform parse step",
   Option ['?', 'h'] ["help"] (NoArg helpOption) "show help information"
  ]
 
