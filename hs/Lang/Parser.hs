@@ -27,6 +27,12 @@ type FunctionBody = [([Pattern], Expr)]
 -- TODO With the new 'def' syntax, we might be able to support some symbols in
 --      method names specifically (x.var=, x.[], etc.)
 
+{-
+Import, Function, TypeDecl, Class, Concept, Instance, Generic, Meta
+ValueId = Function | TypeDecl | Class | Concept | Generic
+SymbolTable [Import] (Map String ValueId) (Map String TypeDecl) (Map String Meta)
+-}
+
 data Decl = Import SourcePos String [String] | -- Name, hiding
             Include SourcePos String [String] | -- Name, hiding
             Module SourcePos String [Decl] |

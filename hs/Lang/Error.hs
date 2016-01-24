@@ -11,7 +11,7 @@ data LangError = ParserError ParseError |
                  StdError ErrorType ErrorPos String
                  deriving (Eq)
 
-data ErrorType = NameError | PackageError | MiscError
+data ErrorType = NameError | PackageError | NotImplementedError | MiscError
                  deriving (Show, Read, Eq, Ord, Enum)
 
 data ErrorPos = NoPos | Pos SourcePos | FilePos FilePath
