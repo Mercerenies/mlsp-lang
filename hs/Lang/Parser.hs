@@ -7,6 +7,7 @@ module Lang.Parser(FileData(..), Decl(..), Type(..), TypeExpr(..), Context(..), 
 
 import Lang.Tokens
 import Lang.Operator
+import Lang.Identifier
 import Data.List(intercalate)
 import Data.Either(partitionEithers)
 import Data.Maybe(isJust)
@@ -133,7 +134,8 @@ parseCode = parse file
 file :: EParser FileData
 file = do
   newlines
-  pkg <- option "Main" $ keyword "package" *> dottedIdentifier <* newlines1
+  let pkgName = fromPackageName mainPackageName
+  pkg <- option pkgName $ keyword "package" *> dottedIdentifier <* newlines1
   decl <- endBy toplevel newlines1
   eof
   return $ FileData pkg decl

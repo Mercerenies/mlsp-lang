@@ -1,5 +1,5 @@
-module Lang.Loader(Environment(..), SymbolTable(..), NameState,
-                   loadNames) where
+module Lang.Loader(Environment(..), SymbolTable(..), ReadState(..), NameState,
+                   loadMain, loadNames) where
 
 import Lang.Parser
 import Lang.Reader
@@ -18,28 +18,31 @@ newtype Environment = Environment (Map PackageName SymbolTable)
 data SymbolTable = SymbolTable
                    deriving (Show, Read, Eq)
 
+data ReadState = ReadState {getToplevelDirectory :: String,
+                            getCurrentFilename :: String}
+
 instance Monoid Environment where
     mempty = Environment mempty
     (Environment a) `mappend` (Environment b) = Environment $ a `mappend` b
 
--- Reader: Top-level main directory name
+-- Reader: Read state
 -- Writer: Warnings
 -- State: Imported packages
 -- Except: Possible errors while processing
-type NameState = RWST String [Warning] [PackageName] (ExceptT LangError IO)
+type NameState = RWST ReadState [Warning] [PackageName] (ExceptT LangError IO)
 
-{- /////
 loadMain :: String -> FileData
             -> IO (Either LangError (Environment, [PackageName], [Warning]))
-loadMain str dat = runExceptT . runRWST (dropFileName str) [] $ loadNames str dat
--}
+loadMain str dat = runExceptT $ runRWST (loadNames (fromPackageName mainPackageName) dat)
+                   (ReadState (dropFileName str) str) []
 
 loadNames :: String -> FileData -> NameState Environment
 loadNames pkg (FileData pkg1 decls) = do
+  ReadState {getCurrentFilename = fname} <- ask
   unless (pkg == pkg1) $
-         lift . throwE . stdError PackageError $
+         lift . throwE . stdErrorFile PackageError fname $
                   "Expected package " ++ pkg ++ " got " ++ pkg1 ++ "."
-  pkg' <- lift . liftMaybe (stdError NameError "Non-package name encountered") $
+  pkg' <- lift . liftMaybe (stdErrorFile NameError fname "Non-package name encountered") $
                                       toPackageName pkg
   pkgs <- get
   if pkg' `elem` pkgs then do
@@ -53,8 +56,8 @@ resolveImport :: Decl -> NameState Environment
 resolveImport (Import pos name _) = do -- The hiding clause is resolved later
   pkg <- lift . liftMaybe (stdErrorPos NameError pos "Non-package name encountered") $
              toPackageName name
-  dir <- ask
-  let pkg' = dir </> foldr (</>) "" pkg
+  ReadState {getToplevelDirectory = dir} <- ask
+  let pkg' = dir </> foldr (</>) "" (getPackageName pkg)
   code <- lift $ parseFile pkg'
-  loadNames pkg' code
+  local (\x -> x {getCurrentFilename = pkg'}) $ loadNames (fromPackageName pkg) code
 resolveImport _ = return mempty

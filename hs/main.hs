@@ -33,8 +33,14 @@ main = do
               die $ "No input files\n" ++ errorHeader
     Right (DoParse Nothing _, _) -> do
               die $ "No input files\n" ++ errorHeader
-    Right (DoCompile (Just _) _, _) -> do
-              die $ "Cannot perform compile step; not yet implemented\n" ++ errorHeader
+    Right (DoCompile (Just inp) out, _) -> do
+              result <- runExceptT $ parseFile inp
+              result' <- case result of
+                           Left err -> return $ Left err
+                           Right act -> loadMain inp act
+              case result' of
+                Left err -> die $ show err
+                Right act -> outputTo out $ show act
     Right (DoParse (Just inp) out, _) -> do
               result <- runExceptT $ parseFile inp
               case result of
