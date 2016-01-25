@@ -1,6 +1,7 @@
 module Lang.Error(LangError(..), ErrorType(..), Warning(..),
                   liftError, liftParseError, liftMaybe,
-                  stdError, stdErrorPos, stdErrorFile) where
+                  stdError, stdErrorPos, stdErrorFile,
+                  invalidNameError, nameConflictError) where
 
 import Text.Parsec.Error
 import Text.Parsec.Pos
@@ -11,7 +12,7 @@ data LangError = ParserError ParseError |
                  StdError ErrorType ErrorPos String
                  deriving (Eq)
 
-data ErrorType = NameError | PackageError | NotImplementedError | MiscError
+data ErrorType = NameError | PackageError | NotYetImplemented | MiscError
                  deriving (Show, Read, Eq, Ord, Enum)
 
 data ErrorPos = NoPos | Pos SourcePos | FilePos FilePath
@@ -44,3 +45,11 @@ stdErrorPos err pos str = StdError err (Pos pos) str
 
 stdErrorFile :: ErrorType -> FilePath -> String -> LangError
 stdErrorFile err pos str = StdError err (FilePos pos) str
+
+invalidNameError :: SourcePos -> String -> LangError
+invalidNameError pos str =
+    stdErrorPos NameError pos $ "Invalid identifier " ++ str
+
+nameConflictError :: SourcePos -> String -> LangError
+nameConflictError pos str =
+    stdErrorPos NameError pos $ "Name " ++ str ++ " already defined"

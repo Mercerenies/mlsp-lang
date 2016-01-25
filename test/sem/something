@@ -1,1 +1,3 @@
 package sem.something
+
+type Synonym[$] = Syn[$]
