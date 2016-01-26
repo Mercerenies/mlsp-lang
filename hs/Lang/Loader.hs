@@ -1,6 +1,7 @@
 module Lang.Loader(ReadState(..), NameState,
                    loadMain, loadNames) where
 
+import Text.Parsec.Pos
 import Lang.Parser
 import Lang.Reader
 import Lang.Identifier
@@ -13,6 +14,7 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.RWS
 import Control.Monad.Trans.Except
+import Control.Arrow
 import System.FilePath
 
 data ReadState = ReadState {getToplevelDirectory :: FilePath,
@@ -100,6 +102,16 @@ resolvePrivateName _ = Nothing
 
 -- TODO Maybe add an 'import X hiding (*)' syntax for just qualified imports
 
+throwMaybe :: LangError -> Maybe a -> PublicResState v a
+throwMaybe err Nothing  = lift $ throwE err
+throwMaybe _   (Just x) = return x
+
+toIdName :: SourcePos -> String -> PublicResState v RawName
+toIdName pos x = throwMaybe (invalidNameError pos x) $ toRawName x
+
+toArgName :: SourcePos -> String -> PublicResState v DSName
+toArgName pos x = throwMaybe (invalidNameError pos x) $ toDSName x
+
 -- TODO Implement modules and includes here
 -- TODO Generic functions and their implementations
 resolvePublicName :: Decl -> PublicResState Unvalidated ()
@@ -112,14 +124,45 @@ resolvePublicName (Module pos _ _) =
 resolvePublicName (Function _ _) =
     undefined -- TODO This (functions and gen impls)
 resolvePublicName (TypeDecl pos name args expr) = do
-  (env, SymbolInterface pr (PublicTable sym)) <- get
-  name' <- lift . liftMaybe (invalidNameError pos name) $ toRawName name
-  args' <- mapM (\x -> lift . liftMaybe (invalidNameError pos x) $ toDSName x) args
+  -- Add the type to the current package
+  -- Current package cannot have matching name but imports can
+  (env, sym) <- get
+  name' <- toIdName pos name
+  args' <- mapM (toArgName pos) args
   let synonym = TypeSynonym pos name' args' expr
-  sym' <- case addValue name' synonym sym of
-            Nothing -> lift . throwE $ nameConflictError pos name
+  sym' <- throwMaybe (nameConflictError pos name) $ addPublicValue name' synonym sym
+  put (env, sym')
+resolvePublicName (Class pos _ _ _ _ _ _) =
+    lift . throwE $ stdErrorPos NotYetImplemented pos "Class declaration"
+resolvePublicName (Concept pos name args ctx inner) = do
+  -- Add the concept to the current package
+  -- Current package cannot have matching name but imports can
+  (env, sym) <- get
+  name' <- toIdName pos name
+  args' <- mapM (toArgName pos) args
+  inner' <- (mapM $ \(x, y) -> (,) <$> toIdName pos x <*> pure y) inner
+  let concept = ConceptId pos name' args' ctx inner' []
+  sym' <- throwMaybe (nameConflictError pos name) $ addPublicValue name' concept sym
+  put (env, sym')
+resolvePublicName (Instance pos name args ctx decls) = do
+  -- Merge the concept into
+  (env, sym) <- get
+  conc <- case toRefName name of
+            Nothing -> lift . throwE $ invalidNameError pos name
             Just x -> return x
-  put (env, SymbolInterface pr (PublicTable sym'))
-resolvePublicName _ = error "Not implemented!" -- /////
+  (pkg, ref) <- lift . ExceptT . return . left (resolutionError pos) $
+                resolveReference conc (env, sym)
+  let inst = InstanceId pos args ctx decls
+  conc1 <- case ref of
+             ConceptId pos0 name0 args0 ctx0 inner0 inst0 ->
+                 return . ConceptId pos0 name0 args0 ctx0 inner0 $ inst : inst0
+             _ -> lift $ throwE (stdErrorPos ReferenceError pos $
+                                             show name ++ " is not a concept")
+  let conc' = getRefIdName conc
+      (env', sym') = case pkg of
+                       PackageName [] -> (env, updatePublicValue conc' conc1 sym)
+                       PackageName xs -> (updatePackageValue conc' conc1 pkg env, sym)
+  put (env', sym')
+
 -- TODO [()] is isomorphic to Nat??? Think about this!!!
 -- TODO SourcePos is printing bizarrely; change Show for it if possible

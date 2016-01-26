@@ -42,7 +42,7 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Class SourcePos String [String] TypeExpr (Maybe [TypeExpr]) Bool [ClassDecl] |
             -- Name, args, variables
             Concept SourcePos String [String] Context [(String, Type)] |
-            Instance SourcePos String [TypeExpr] Context [Decl] |
+            Instance SourcePos String [TypeExpr] Context [FunctionDecl] |
             Generic SourcePos String Type |
             Meta SourcePos FunctionDecl |
             MetaDeclare SourcePos MetaCall
@@ -401,7 +401,7 @@ instanceDecl :: EParser Decl
 instanceDecl = do
   keyword "instance"
   newlines
-  name <- identifier
+  name <- dottedIdentifier
   args <- option [] $ do
                 operator "["
                 newlines
@@ -411,7 +411,7 @@ instanceDecl = do
                 return args'
   context <- option idContext $ try (newlines *> contextExpr)
   newlines1
-  internals <- endBy functionDecl newlines1
+  internals <- endBy (keyword "def" *> newlines *> functionDecl') newlines1
   keyword "end"
   pos <- getPosition
   return $ Instance pos name args context internals

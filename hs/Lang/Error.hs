@@ -1,18 +1,25 @@
 module Lang.Error(LangError(..), ErrorType(..), Warning(..),
+                  ResolutionError(..),
                   liftError, liftParseError, liftMaybe,
                   stdError, stdErrorPos, stdErrorFile,
-                  invalidNameError, nameConflictError) where
+                  invalidNameError, nameConflictError,
+                  resolutionError) where
 
 import Text.Parsec.Error
 import Text.Parsec.Pos
+import Lang.Identifier
 import Control.Monad.Trans.Except
 import Control.Arrow
+
+data ResolutionError = NoSuchName String | Ambiguous String [PackageName]
+                     deriving (Show, Read, Eq)
 
 data LangError = ParserError ParseError |
                  StdError ErrorType ErrorPos String
                  deriving (Eq)
 
-data ErrorType = NameError | PackageError | NotYetImplemented | MiscError
+data ErrorType = NameError | PackageError | ReferenceError |
+                 NotYetImplemented | MiscError
                  deriving (Show, Read, Eq, Ord, Enum)
 
 data ErrorPos = NoPos | Pos SourcePos | FilePos FilePath
@@ -53,3 +60,12 @@ invalidNameError pos str =
 nameConflictError :: SourcePos -> String -> LangError
 nameConflictError pos str =
     stdErrorPos NameError pos $ "Name " ++ str ++ " already defined"
+
+resolutionError :: SourcePos -> ResolutionError -> LangError
+resolutionError pos (NoSuchName str) =
+    stdErrorPos ReferenceError pos $ "No such name " ++ str
+resolutionError pos (Ambiguous str pkgs) =
+    stdErrorPos ReferenceError pos $ "Ambiguous reference " ++ str ++ "\n" ++
+                unlines (map pkgLine pkgs)
+    where pkgLine (PackageName []) = " * local package"
+          pkgLine pkg = " * " ++ fromPackageName pkg

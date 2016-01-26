@@ -1,2 +1,5 @@
 
 import sem.something
+
+instance Blah[$1, $2]
+end

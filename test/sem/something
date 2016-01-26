@@ -1,3 +1,8 @@
 package sem.something
 
 type Synonym[$] = Syn[$]
+
+concept Blah[$1, $2]
+  a :: (Int) -> $1
+  b :: String
+end

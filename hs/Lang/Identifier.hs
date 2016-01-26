@@ -1,9 +1,11 @@
 module Lang.Identifier(PackageName(..), SymbolicName(..),
                        RawName(..), RefName(..), DSName(..),
+                       getRawName,
                        getPackageName,
                        translateName, mainPackageName,
                        toPackageName, fromPackageName,
-                       toRawName, toRefName, toDSName) where
+                       toRawName, toRefName, toDSName,
+                       getRefIdName) where
 
 import Lang.Util
 import Data.List(intercalate)
@@ -27,6 +29,9 @@ data SymbolicName a = QualifiedName [SymbolicName a] |
                       DollarSign a |
                       PercentSign a
                       deriving (Show, Read, Eq)
+
+getRawName :: RawName -> String
+getRawName (RawName str) = str
 
 getPackageName :: PackageName -> [String]
 getPackageName (PackageName x) = x
@@ -75,3 +80,7 @@ toDSName :: String -> Maybe DSName
 toDSName str = case translateName str of
                  DollarSign x -> Just $ DSName x
                  _ -> Nothing
+
+getRefIdName :: RefName -> RawName
+getRefIdName (Raw x) = x
+getRefIdName (Qualified _ x) = x
