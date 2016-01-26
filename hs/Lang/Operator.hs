@@ -42,8 +42,8 @@ operatorTable = [
    [binary AssocLeft BooleanAnd $ operator "&&"],
    [binary AssocLeft BooleanOr $ operator "||"],
    [binary AssocLeft Apply $ operator "=~"],
-   [binary AssocLeft UniversalAnd $ operator "and"],
-   [binary AssocLeft UniversalOr $ operator "or"]
+   [binary AssocLeft UniversalAnd $ keyword "and"],
+   [binary AssocLeft UniversalOr $ keyword "or"]
  ]
 
 operatorExpr :: EParser a -> EParser (OpExpr Op a)
