@@ -73,13 +73,12 @@ keywords :: [String]
 keywords = ["package", "import", "include", "hiding", "module", "type", "begin", "end",
             "concept", "instance", "if", "then", "else", "unless",
             "in", "case", "when", "cond", "for", "generic", "let", "class", "def",
-            "where", "meta"]
+            "where", "meta", "and", "or"]
 
 operators :: [String]
 operators = ["+=", "-=", "*=", "/=", "==", "<=", ">=", "&&=", "||=", "&&", "||",
              "...", "->", "<-", "=~", "::", "<", ">", "*", "/", "[", "]", "&", "!",
-             "{", "}", ",", "=", ".", "+", "-", "(", ")", "|", "^",
-             "and", "or"]
+             "{", "}", ",", "=", ".", "+", "-", "(", ")", "|", "^"]
 
 reDelimiters :: [Char]
 reDelimiters = "/~!@#$%^&*|-=+"

@@ -27,8 +27,7 @@ tokens = contents <* many (void spaceish <|> comment) <* eof
           comment = try blockComment <|> try lineComment
 
 token_ :: Parsec String () Token
-token_ = try keyword <|>
-         try reMatch <|>
+token_ = try reMatch <|>
          try reSub <|>
          try identifier <|>
          try number <|>
@@ -40,9 +39,6 @@ token_ = try keyword <|>
 newline_ :: Parsec String () Lexeme
 newline_ = Newline <$ oneOf "\r\n;"
 
-keyword :: Parsec String () Token
-keyword = Keyword <$> choice (map (try . string) keywords)
-
 operator :: Parsec String () Token
 operator = Operator <$> choice (map (try . string) operators)
 
@@ -50,7 +46,10 @@ operator = Operator <$> choice (map (try . string) operators)
 identifier :: Parsec String () Token
 identifier = do
   str <- (:) <$> (char '$' <|> char '@' <|> char '%' <|> alphaUnder) <*> many alNumUnder
-  return $ Identifier str
+  if str `elem` keywords then
+      return $ Keyword str
+  else
+      return $ Identifier str
 
 integerNumber :: Parsec String () Integer
 integerNumber = do
