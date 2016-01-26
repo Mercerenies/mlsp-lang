@@ -3,3 +3,7 @@ import sem.something
 
 instance Blah[$1, $2]
 end
+
+generic something :: (Int) -> Int
+
+meta metaCall(x) = x

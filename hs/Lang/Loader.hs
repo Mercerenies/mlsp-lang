@@ -161,8 +161,23 @@ resolvePublicName (Instance pos name args ctx decls) = do
   let conc' = getRefIdName conc
       (env', sym') = case pkg of
                        PackageName [] -> (env, updatePublicValue conc' conc1 sym)
-                       PackageName xs -> (updatePackageValue conc' conc1 pkg env, sym)
+                       PackageName _  -> (updatePackageValue conc' conc1 pkg env, sym)
   put (env', sym')
+resolvePublicName (Generic pos name type_) = do
+  (env, sym) <- get
+  name' <- toIdName pos name
+  let gen = GenericId pos name' type_ []
+  sym' <- throwMaybe (nameConflictError pos name) $ addPublicValue name' gen sym
+  put (env, sym')
+resolvePublicName (Meta pos decl) = do
+  (env, sym) <- get
+  let FunctionDecl _ name _ = decl
+      meta = MetaId pos decl
+  name' <- toIdName pos name
+  sym' <- throwMaybe (nameConflictError pos name) $ addPublicMeta name' meta sym
+  put (env, sym')
+resolvePublicName (MetaDeclare pos _) =
+    lift . throwE $ stdErrorPos NotYetImplemented pos "Meta calls"
 
 -- TODO [()] is isomorphic to Nat??? Think about this!!!
 -- TODO SourcePos is printing bizarrely; change Show for it if possible

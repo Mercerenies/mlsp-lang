@@ -47,7 +47,7 @@ data ValueId v = FunctionId SourcePos FunctionDecl |
                  ClassId SourcePos String [String] TypeExpr (Maybe [TypeExpr]) |
                  ConceptId SourcePos RawName [DSName] Context
                                [(RawName, Type)] [Instance] |
-                 GenericId SourcePos String Type [(SourcePos, FunctionDecl)]
+                 GenericId SourcePos RawName Type [(SourcePos, FunctionDecl)]
                  deriving (Show, Eq)
 
 data MetaId v = MetaId SourcePos FunctionDecl

@@ -6,3 +6,6 @@ concept Blah[$1, $2]
   a :: (Int) -> $1
   b :: String
 end
+
+instance Blah[$1, $2]
+end
