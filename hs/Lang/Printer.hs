@@ -48,7 +48,8 @@ instance Lispable Decl where
     --   ; where vars is a list of (name type)
     -- (generic pos name type)
     -- (instance pos name (&rest args) ctx &rest vars)
-    -- (class pos name (&rest args) parent (&optional (&rest children)) abstr &body body)
+    -- (class pos name (&rest args) (&optional parent) (&optional (&rest children))
+    --    abstr &body body)
     -- (meta pos &rest body)
     -- (meta-expr pos meta)
     lispify (Include pos name hiding) =
@@ -76,10 +77,13 @@ instance Lispable Decl where
                  ++ map lispify vars
     lispify (Class pos name args parent children abstr inner) =
         List $ [Symbol "class", lispify pos, Atom name, List $ map Atom args,
-                lispify parent, children', lispify abstr] ++ map lispify inner
+                parent', children', lispify abstr] ++ map lispify inner
             where children' = case children of
                                 Nothing -> List []
                                 Just xs -> List [List $ map lispify xs]
+                  parent' = case parent of
+                              Nothing -> List []
+                              Just x -> List [lispify x]
     lispify (Meta pos func) =
         case lispify func of
           List xs -> List $ [Symbol "meta", lispify pos] ++ xs

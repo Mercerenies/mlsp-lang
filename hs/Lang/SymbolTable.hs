@@ -44,7 +44,8 @@ data Unvalidated
 
 data ValueId v = FunctionId SourcePos FunctionDecl |
                  TypeSynonym SourcePos RawName [DSName] TypeExpr |
-                 ClassId SourcePos String [String] TypeExpr (Maybe [TypeExpr]) |
+                 ClassId SourcePos RawName [DSName] (Maybe TypeExpr) (Maybe [TypeExpr])
+                     Bool |
                  ConceptId SourcePos RawName [DSName] Context
                                [(RawName, Type)] [Instance] |
                  GenericId SourcePos RawName Type [(SourcePos, FunctionDecl)]

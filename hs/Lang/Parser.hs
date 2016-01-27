@@ -39,7 +39,8 @@ data Decl = Import SourcePos String [String] | -- Name, hiding
             Function SourcePos FunctionDecl |
             TypeDecl SourcePos String [String] TypeExpr |
             -- Name, arguments, parent, children, abstract, variables, methods
-            Class SourcePos String [String] TypeExpr (Maybe [TypeExpr]) Bool [ClassDecl] |
+            Class SourcePos String [String] (Maybe TypeExpr) (Maybe [TypeExpr])
+                Bool [ClassDecl] |
             -- Name, args, variables
             Concept SourcePos String [String] Context [(String, Type)] |
             Instance SourcePos String [TypeExpr] Context [FunctionDecl] |
@@ -272,14 +273,12 @@ classDecl = do
   newlines
   name <- identifier
   args <- option [] $ operator "[" *> sepBy identifier nlComma <* operator "]"
-  pos0 <- getPosition
   newlines1
   contents <- many $ (classMethod <|> classMeta <|> classField) <* newlines1
   let (inner, parent, children, abstract) = foldl process init contents
-      parent' = maybe (Named pos0 "T" [] Read) id parent
   keyword "end"
   pos <- getPosition
-  return $ Class pos name args parent' children abstract (inner [])
+  return $ Class pos name args parent children abstract (inner [])
       where classField = do
               name <- identifier
               operator "::"

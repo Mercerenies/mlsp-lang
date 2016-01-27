@@ -165,7 +165,7 @@ resolvePublicName (TypeDecl pos name args expr) = do
   let synonym = TypeSynonym pos name' args' expr
   sym' <- throwMaybe (nameConflictError pos name) $ addPublicValue name' synonym sym
   put (env, sym')
-resolvePublicName (Class pos _ _ _ _ _ _) =
+resolvePublicName (Class pos _ _ _ _ _ _) = -- /////
     lift . throwE $ stdErrorPos NotYetImplemented pos "Class declaration"
 resolvePublicName (Concept pos name args ctx inner) = do
   -- TODO Add the functions to the current namespace too
