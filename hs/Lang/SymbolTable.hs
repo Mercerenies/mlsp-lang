@@ -1,11 +1,11 @@
 module Lang.SymbolTable(Environment(..), SymbolInterface(..),
-                        PublicTable(..), PrivateTable(..),
+                        PublicTable(..), PrivateTable(..), FunctionDecl'(..),
                         SymbolTable(..), Validated, Unvalidated, ValueId(..),
-                        MetaId(..), Instance(..), lookupValue, lookupMeta,
-                        lookupPublicValue, lookupPublicMeta,
+                        MetaId(..), ClassInner(..), Instance(..),
+                        lookupValue, lookupMeta, lookupPublicValue, lookupPublicMeta,
                         addValue, addMeta, addPublicValue, addPublicMeta,
                         updateValue, updatePublicValue, updatePackageValue,
-                        resolveReference) where
+                        resolveReference, handleFunctionDecl) where
 
 import Lang.Identifier
 import Lang.Error
@@ -42,17 +42,25 @@ data SymbolTable v = SymbolTable {getValues :: Map RawName (ValueId v),
 data Validated
 data Unvalidated
 
-data ValueId v = FunctionId SourcePos FunctionDecl |
+data FunctionDecl' v = FunctionDecl' (Maybe Type) RawName FunctionBody
+                       deriving (Show, Eq)
+
+data ValueId v = FunctionId SourcePos (FunctionDecl' v) |
                  TypeSynonym SourcePos RawName [DSName] TypeExpr |
                  ClassId SourcePos RawName [DSName] (Maybe TypeExpr) (Maybe [TypeExpr])
-                     Bool |
+                     Bool [ClassInner v] |
                  ConceptId SourcePos RawName [DSName] Context
                                [(RawName, Type)] [Instance] |
-                 GenericId SourcePos RawName Type [(SourcePos, FunctionDecl)]
+                 GenericId SourcePos RawName Type [(SourcePos, FunctionDecl' v)] |
+                 ConceptFuncId SourcePos RawName RawName -- Func Name, Conc Name
                  deriving (Show, Eq)
 
 data MetaId v = MetaId SourcePos FunctionDecl
                 deriving (Show, Eq)
+
+data ClassInner v = FieldId SourcePos RawName TypeExpr |
+                    MethodId SourcePos (FunctionDecl' v)
+                    deriving (Show, Eq)
 
 data Instance = InstanceId SourcePos [TypeExpr] Context [FunctionDecl]
                 deriving (Show, Eq)
@@ -137,3 +145,8 @@ updatePublicValue str val (SymbolInterface pkg pr (PublicTable pu)) =
 updatePackageValue :: RawName -> ValueId v -> PackageName -> Environment v -> Environment v
 updatePackageValue str val pkg (Environment env) =
     Environment $ Map.adjust (updatePublicValue str val) pkg env
+
+handleFunctionDecl :: FunctionDecl -> Maybe (FunctionDecl' Unvalidated)
+handleFunctionDecl (FunctionDecl type_ name body) = do
+  name' <- toRawName name
+  return $ FunctionDecl' type_ name' body

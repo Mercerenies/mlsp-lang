@@ -1,5 +1,6 @@
 module Lang.Parser(FileData(..), Decl(..), Type(..), TypeExpr(..), Context(..), Expr(..),
                    Conditional(..), Pattern(..), Literal(..), FunctionDecl(..),
+                   FunctionBody,
                    ClassDecl(..), Access(..), IfOp(..), ForOp(..), Call(..), MetaCall(..),
                    parseCode, file, toplevel) where
 

@@ -113,6 +113,11 @@ toIdName pos x = throwMaybe (invalidNameError pos x) $ toRawName x
 toArgName :: SourcePos -> String -> PublicResState v DSName
 toArgName pos x = throwMaybe (invalidNameError pos x) $ toDSName x
 
+handleFunc :: SourcePos -> FunctionDecl ->
+              PublicResState Unvalidated (FunctionDecl' Unvalidated)
+handleFunc pos func@(FunctionDecl _ n _) =
+    throwMaybe (invalidNameError pos n) $ handleFunctionDecl func
+
 -- TODO Implement modules and includes here
 -- TODO Generic functions and their implementations
 resolvePublicName :: Decl -> PublicResState Unvalidated ()
@@ -132,7 +137,8 @@ resolvePublicName (Function pos decl) = do
   case resolveReference (getPackage sym) name' (env, sym) of
     Right (pkg, GenericId pos0 name0 type0 inst0) ->
         do
-          let gen1 = GenericId pos0 name0 type0 $ (pos, decl) : inst0
+          decl' <- handleFunc pos decl
+          let gen1 = GenericId pos0 name0 type0 $ (pos, decl') : inst0
               (env', sym') = case pkg of
                                PackageName [] ->
                                    (env, updatePublicValue name0 gen1 sym)
@@ -147,15 +153,16 @@ resolvePublicName (Function pos decl) = do
     Left _ -> case name' of
                 Raw name'' -> newFunction (env, sym) (pos, decl) name''
                 Qualified {} -> lift . throwE $ invalidNameError pos name
- where newFunction :: (Environment v, SymbolInterface v) ->
+ where newFunction :: (Environment Unvalidated, SymbolInterface Unvalidated) ->
                       (SourcePos, FunctionDecl) ->
                       RawName ->
-                      PublicResState v ()
-       newFunction (env, sym) (pos, decl) name' =
-           let func = FunctionId pos decl
-           in case addPublicValue name' func sym of
-                Nothing -> lift . throwE $ nameConflictError pos (getRawName name')
-                Just sym' -> put (env, sym')
+                      PublicResState Unvalidated ()
+       newFunction (env, sym) (pos, decl) name' = do
+           decl' <- handleFunc pos decl
+           let func = FunctionId pos decl'
+           case addPublicValue name' func sym of
+             Nothing -> lift . throwE $ nameConflictError pos (getRawName name')
+             Just sym' -> put (env, sym')
 resolvePublicName (TypeDecl pos name args expr) = do
   -- Add the type to the current package
   -- Current package cannot have matching name but imports can
@@ -178,6 +185,12 @@ resolvePublicName (Concept pos name args ctx inner) = do
   let concept = ConceptId pos name' args' ctx inner' []
   sym' <- throwMaybe (nameConflictError pos name) $ addPublicValue name' concept sym
   put (env, sym')
+  forM_ inner' $ \(fname, _) -> do
+    (env0, sym0) <- get
+    let cfi = ConceptFuncId pos fname name'
+        RawName fname' = fname
+    sym1 <- throwMaybe (nameConflictError pos fname') $ addPublicValue fname cfi sym0
+    put (env0, sym1)
 resolvePublicName (Instance pos name args ctx decls) = do
   -- Merge the instance into its concept
   (env, sym) <- get
@@ -212,6 +225,16 @@ resolvePublicName (Meta pos decl) = do
   put (env, sym')
 resolvePublicName (MetaDeclare pos _) =
     lift . throwE $ stdErrorPos NotYetImplemented pos "Meta calls"
+
+-- TODO Call this from resolvePublicName
+resolveClassName :: ClassDecl -> PublicResState Unvalidated (ClassInner Unvalidated)
+resolveClassName (Field pos name type_) = do
+  name' <- toIdName pos name
+  return $ FieldId pos name' type_
+resolveClassName (Method pos decl) = do
+  MethodId pos <$> handleFunc pos decl
+resolveClassName (MetaDeclClass pos _) = do
+  lift . throwE $ stdErrorPos NotYetImplemented pos "Meta calls"
 
 -- TODO [()] is isomorphic to Nat??? Think about this!!!
 -- TODO SourcePos is printing bizarrely; change Show for it if possible
