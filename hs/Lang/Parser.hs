@@ -216,7 +216,7 @@ functionDecl = do
 
 functionDecl' :: EParser FunctionDecl
 functionDecl' = do
-  name <- identifier
+  name <- dottedIdentifier
   operator "("
   newlines
   args <- sepBy pattern nlComma

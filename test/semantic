@@ -7,3 +7,11 @@ end
 generic something :: (Int) -> Int
 
 meta metaCall(x) = x
+
+def notGeneric(x) = x
+
+def generic_(x)
+  (x) -> 1
+end
+
+def something(n) = 1

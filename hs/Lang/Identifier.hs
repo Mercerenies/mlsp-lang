@@ -5,7 +5,7 @@ module Lang.Identifier(PackageName(..), SymbolicName(..),
                        translateName, mainPackageName,
                        toPackageName, fromPackageName,
                        toRawName, toRefName, toDSName,
-                       getRefIdName) where
+                       getRefIdName, fromRefName) where
 
 import Lang.Util
 import Data.List(intercalate)
@@ -75,6 +75,10 @@ toRefName str = case translateName str of
                   _ -> Nothing
     where getBasicName (BasicName x) = Just x
           getBasicName _ = Nothing
+
+fromRefName :: RefName -> String
+fromRefName (Raw (RawName x)) = x
+fromRefName (Qualified pkg (RawName x)) = fromPackageName pkg ++ "." ++ x
 
 toDSName :: String -> Maybe DSName
 toDSName str = case translateName str of

@@ -8,7 +8,7 @@ import Lang.Identifier
 import Lang.Error
 import Lang.SymbolTable
 import Data.Maybe(catMaybes)
-import Data.Map(Map)
+-- import Data.Map(Map)
 import qualified Data.Map as Map
 import Control.Monad
 import Control.Monad.State
@@ -63,7 +63,7 @@ loadNames pkg (FileData pkgDecl decls) = do
     modify (pkg' :)
     env0 <- mconcat <$> mapM resolveImport decls
     private <- resolvePrivateNames decls
-    let sym0 = SymbolInterface private (PublicTable mempty)
+    let sym0 = SymbolInterface pkg' private (PublicTable mempty)
     (env1, sym1) <- resolvePublicNames (env0, sym0) decls
     let Environment env1' = env1
         env2 = Environment $ Map.insert pkg' sym1 env1'
@@ -94,10 +94,11 @@ resolvePrivateNames :: [Decl] -> NameState (PrivateTable Unvalidated)
 resolvePrivateNames decls =
     return . PrivateTable . catMaybes $ map resolvePrivateName decls
 
-resolvePrivateName :: Decl -> Maybe (PackageName, [String])
+resolvePrivateName :: Decl -> Maybe (PackageName, [RawName])
 resolvePrivateName (Import _ name hiding) = do
   pkg <- toPackageName name
-  return (pkg, hiding)
+  hiding' <- mapM toRawName hiding
+  return (pkg, hiding')
 resolvePrivateName _ = Nothing
 
 -- TODO Maybe add an 'import X hiding (*)' syntax for just qualified imports
@@ -121,8 +122,40 @@ resolvePublicName (Include pos _ _) =
     lift . throwE $ stdErrorPos NotYetImplemented pos "Include statement"
 resolvePublicName (Module pos _ _) =
     lift . throwE $ stdErrorPos NotYetImplemented pos "Module statement"
-resolvePublicName (Function _ _) =
-    undefined -- TODO This (functions and gen impls)
+resolvePublicName (Function pos decl) = do
+  -- Either merge into generic or create a function
+  (env, sym) <- get
+  let FunctionDecl _ name _ = decl
+  name' <- case toRefName name of
+             Nothing -> lift . throwE $ invalidNameError pos name
+             Just x -> return x
+  case resolveReference (getPackage sym) name' (env, sym) of
+    Right (pkg, GenericId pos0 name0 type0 inst0) ->
+        do
+          let gen1 = GenericId pos0 name0 type0 $ (pos, decl) : inst0
+              (env', sym') = case pkg of
+                               PackageName [] ->
+                                   (env, updatePublicValue name0 gen1 sym)
+                               PackageName _ ->
+                                   (updatePackageValue name0 gen1 pkg env, sym)
+          put (env', sym')
+    Right (PackageName (_:_), _) ->
+        case name' of
+          Raw name'' -> newFunction (env, sym) (pos, decl) name''
+          Qualified {} -> lift . throwE $ invalidNameError pos name
+    Right (_, _) -> lift . throwE $ nameConflictError pos name
+    Left _ -> case name' of
+                Raw name'' -> newFunction (env, sym) (pos, decl) name''
+                Qualified {} -> lift . throwE $ invalidNameError pos name
+ where newFunction :: (Environment v, SymbolInterface v) ->
+                      (SourcePos, FunctionDecl) ->
+                      RawName ->
+                      PublicResState v ()
+       newFunction (env, sym) (pos, decl) name' =
+           let func = FunctionId pos decl
+           in case addPublicValue name' func sym of
+                Nothing -> lift . throwE $ nameConflictError pos (getRawName name')
+                Just sym' -> put (env, sym')
 resolvePublicName (TypeDecl pos name args expr) = do
   -- Add the type to the current package
   -- Current package cannot have matching name but imports can
@@ -135,6 +168,7 @@ resolvePublicName (TypeDecl pos name args expr) = do
 resolvePublicName (Class pos _ _ _ _ _ _) =
     lift . throwE $ stdErrorPos NotYetImplemented pos "Class declaration"
 resolvePublicName (Concept pos name args ctx inner) = do
+  -- TODO Add the functions to the current namespace too
   -- Add the concept to the current package
   -- Current package cannot have matching name but imports can
   (env, sym) <- get
@@ -145,13 +179,13 @@ resolvePublicName (Concept pos name args ctx inner) = do
   sym' <- throwMaybe (nameConflictError pos name) $ addPublicValue name' concept sym
   put (env, sym')
 resolvePublicName (Instance pos name args ctx decls) = do
-  -- Merge the concept into
+  -- Merge the instance into its concept
   (env, sym) <- get
   conc <- case toRefName name of
             Nothing -> lift . throwE $ invalidNameError pos name
             Just x -> return x
   (pkg, ref) <- lift . ExceptT . return . left (resolutionError pos) $
-                resolveReference conc (env, sym)
+                resolveReference (getPackage sym) conc (env, sym)
   let inst = InstanceId pos args ctx decls
   conc1 <- case ref of
              ConceptId pos0 name0 args0 ctx0 inner0 inst0 ->

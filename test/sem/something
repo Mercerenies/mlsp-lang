@@ -9,3 +9,5 @@ end
 
 instance Blah[$1, $2]
 end
+
+generic generic_ :: (Int) -> Int
