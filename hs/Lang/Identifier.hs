@@ -1,10 +1,10 @@
 module Lang.Identifier(PackageName(..), SymbolicName(..),
-                       RawName(..), RefName(..), DSName(..),
+                       RawName(..), RefName(..), DSName(..), AtName(..),
                        getRawName,
                        getPackageName,
                        translateName, mainPackageName,
                        toPackageName, fromPackageName,
-                       toRawName, toRefName, toDSName,
+                       toRawName, toRefName, toDSName, toAtName,
                        getRefIdName, fromRefName) where
 
 import Lang.Util
@@ -17,6 +17,9 @@ newtype RawName = RawName String
     deriving (Show, Read, Eq, Ord)
 
 newtype DSName = DSName String
+    deriving (Show, Read, Eq, Ord)
+
+newtype AtName = AtName String
     deriving (Show, Read, Eq, Ord)
 
 data RefName = Raw RawName |
@@ -79,6 +82,11 @@ toRefName str = case translateName str of
 fromRefName :: RefName -> String
 fromRefName (Raw (RawName x)) = x
 fromRefName (Qualified pkg (RawName x)) = fromPackageName pkg ++ "." ++ x
+
+toAtName :: String -> Maybe AtName
+toAtName str = case translateName str of
+                 AtSign x -> Just $ AtName x
+                 _ -> Nothing
 
 toDSName :: String -> Maybe DSName
 toDSName str = case translateName str of

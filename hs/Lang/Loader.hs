@@ -113,13 +113,16 @@ toIdName pos x = throwMaybe (invalidNameError pos x) $ toRawName x
 toArgName :: SourcePos -> String -> PublicResState v DSName
 toArgName pos x = throwMaybe (invalidNameError pos x) $ toDSName x
 
+toFieldName :: SourcePos -> String -> PublicResState v AtName
+toFieldName pos x = throwMaybe (invalidNameError pos x) $ toAtName x
+
 handleFunc :: SourcePos -> FunctionDecl ->
               PublicResState Unvalidated (FunctionDecl' Unvalidated)
 handleFunc pos func@(FunctionDecl _ n _) =
     throwMaybe (invalidNameError pos n) $ handleFunctionDecl func
 
 -- TODO Implement modules and includes here
--- TODO Generic functions and their implementations
+-- TODO Comment this behemoth immensely
 resolvePublicName :: Decl -> PublicResState Unvalidated ()
 resolvePublicName (Import {}) =
     return mempty
@@ -172,10 +175,18 @@ resolvePublicName (TypeDecl pos name args expr) = do
   let synonym = TypeSynonym pos name' args' expr
   sym' <- throwMaybe (nameConflictError pos name) $ addPublicValue name' synonym sym
   put (env, sym')
-resolvePublicName (Class pos _ _ _ _ _ _) = -- /////
-    lift . throwE $ stdErrorPos NotYetImplemented pos "Class declaration"
+resolvePublicName (Class pos name args parent children abstr decls) = do
+  (env, sym) <- get
+  let declError pos = nameConflictError pos . getInnerName . classInnerName
+  name' <- toIdName pos name
+  args' <- mapM (toArgName pos) args
+  decls' <- concat <$> mapM resolveClassName decls
+  decls'' <- foldM (\x y -> throwMaybe (declError pos y) $ addToClass y x)
+             Map.empty decls'
+  let cls = ClassId pos name' args' parent children abstr decls''
+  sym' <- throwMaybe (nameConflictError pos name) $ addPublicValue name' cls sym
+  put (env, sym')
 resolvePublicName (Concept pos name args ctx inner) = do
-  -- TODO Add the functions to the current namespace too
   -- Add the concept to the current package
   -- Current package cannot have matching name but imports can
   (env, sym) <- get
@@ -227,12 +238,13 @@ resolvePublicName (MetaDeclare pos _) =
     lift . throwE $ stdErrorPos NotYetImplemented pos "Meta calls"
 
 -- TODO Call this from resolvePublicName
-resolveClassName :: ClassDecl -> PublicResState Unvalidated (ClassInner Unvalidated)
+resolveClassName :: ClassDecl ->
+                    PublicResState Unvalidated [ClassInner Unvalidated]
 resolveClassName (Field pos name type_) = do
-  name' <- toIdName pos name
-  return $ FieldId pos name' type_
+  name' <- toFieldName pos name
+  return . pure $ FieldId pos name' type_
 resolveClassName (Method pos decl) = do
-  MethodId pos <$> handleFunc pos decl
+  pure . MethodId pos <$> handleFunc pos decl
 resolveClassName (MetaDeclClass pos _) = do
   lift . throwE $ stdErrorPos NotYetImplemented pos "Meta calls"
 

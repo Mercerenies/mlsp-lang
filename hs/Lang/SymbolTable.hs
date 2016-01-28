@@ -1,11 +1,12 @@
 module Lang.SymbolTable(Environment(..), SymbolInterface(..),
                         PublicTable(..), PrivateTable(..), FunctionDecl'(..),
                         SymbolTable(..), Validated, Unvalidated, ValueId(..),
-                        MetaId(..), ClassInner(..), Instance(..),
+                        MetaId(..), ClassInner(..), Instance(..), InnerName,
                         lookupValue, lookupMeta, lookupPublicValue, lookupPublicMeta,
                         addValue, addMeta, addPublicValue, addPublicMeta,
                         updateValue, updatePublicValue, updatePackageValue,
-                        resolveReference, handleFunctionDecl) where
+                        resolveReference, handleFunctionDecl,
+                        classInnerName, getInnerName, addToClass) where
 
 import Lang.Identifier
 import Lang.Error
@@ -31,6 +32,8 @@ newtype PrivateTable v = PrivateTable {getPrivateTable :: [(PackageName, [RawNam
 newtype PublicTable v = PublicTable {getPublicTable :: SymbolTable v}
     deriving (Show, Eq)
 
+type InnerName = Either AtName RawName
+
 data SymbolTable v = SymbolTable {getValues :: Map RawName (ValueId v),
                                   getMetas :: Map RawName (MetaId v)}
                    deriving (Show, Eq)
@@ -48,7 +51,7 @@ data FunctionDecl' v = FunctionDecl' (Maybe Type) RawName FunctionBody
 data ValueId v = FunctionId SourcePos (FunctionDecl' v) |
                  TypeSynonym SourcePos RawName [DSName] TypeExpr |
                  ClassId SourcePos RawName [DSName] (Maybe TypeExpr) (Maybe [TypeExpr])
-                     Bool [ClassInner v] |
+                     Bool (Map InnerName (ClassInner v)) |
                  ConceptId SourcePos RawName [DSName] Context
                                [(RawName, Type)] [Instance] |
                  GenericId SourcePos RawName Type [(SourcePos, FunctionDecl' v)] |
@@ -58,7 +61,8 @@ data ValueId v = FunctionId SourcePos (FunctionDecl' v) |
 data MetaId v = MetaId SourcePos FunctionDecl
                 deriving (Show, Eq)
 
-data ClassInner v = FieldId SourcePos RawName TypeExpr |
+-- ///// Support @identifier names here (and fix this elsewhere)
+data ClassInner v = FieldId SourcePos AtName TypeExpr |
                     MethodId SourcePos (FunctionDecl' v)
                     deriving (Show, Eq)
 
@@ -150,3 +154,18 @@ handleFunctionDecl :: FunctionDecl -> Maybe (FunctionDecl' Unvalidated)
 handleFunctionDecl (FunctionDecl type_ name body) = do
   name' <- toRawName name
   return $ FunctionDecl' type_ name' body
+
+classInnerName :: ClassInner v -> InnerName
+classInnerName (FieldId _ name _) = Left name
+classInnerName (MethodId _ (FunctionDecl' _ name _)) = Right name
+
+getInnerName :: InnerName -> String
+getInnerName (Left (AtName name)) = name
+getInnerName (Right (RawName name)) = name
+
+addToClass :: ClassInner v -> Map InnerName (ClassInner v) ->
+              Maybe (Map InnerName (ClassInner v))
+addToClass inner cls = let name = classInnerName inner
+                       in case Map.lookup name cls of
+                            Nothing -> Just $ Map.insert name inner cls
+                            Just _ -> Nothing
