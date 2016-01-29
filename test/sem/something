@@ -15,4 +15,5 @@ generic generic_ :: (Int) -> Int
 class Foo
   @a :: Int
   @b :: Double
+  def x(z) = z
 end
