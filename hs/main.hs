@@ -1,6 +1,7 @@
 -- Based on MLSP5.txt
 
 import Lang.Printer
+import Lang.PrettyPrinter
 import Lang.Loader
 import Lang.Reader
 import Lang.Options
@@ -18,7 +19,7 @@ main' = do
               result <- runExceptT $ parseFile file
               case result of
                 Left expr -> hPutStrLn stderr $ show expr
-                Right act -> output StdOut act
+                Right act -> outputLisp StdOut act
     _ -> hPutStrLn stderr "Usage: ./main <filename>"
 
 main :: IO ()
@@ -42,11 +43,11 @@ main = do
                 Left err -> die $ show err
                 Right (act, _, warns) -> do
                              mapM_ (hPrint stderr) warns
-                             output out act
+                             outputLisp out act
     Right (DoParse (Just inp) out, _) -> do
               result <- runExceptT $ parseFile inp
               case result of
                 Left err -> die $ show err
-                Right act -> output out act
+                Right act -> outputLisp out act
  where header = "Usage: ./main [OPTION...] files...\n"
        errorHeader = header ++ "Try --help for more information\n"

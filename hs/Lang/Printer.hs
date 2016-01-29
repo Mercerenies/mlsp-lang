@@ -1,5 +1,5 @@
 module Lang.Printer(Output(..), SExpr(..), Lispable(..),
-                    showSexp, printSexp, output, outputTo, maybeToOutput) where
+                    showSexp, printSexp, outputLisp, outputTo, maybeToOutput) where
 
 -- TODO Alter the syntax slightly to allow default implementations in
 --      concepts (possibly with some way to specify what must be implemented
@@ -37,9 +37,9 @@ maybeToOutput :: Maybe FilePath -> Output
 maybeToOutput (Just x) = OutFile x
 maybeToOutput Nothing = StdOut
 
-output :: Lispable a => Output -> a -> IO ()
-output StdOut = printSexp . lispify
-output (OutFile str) = writeFile str . showSexp . lispify
+outputLisp :: Lispable a => Output -> a -> IO ()
+outputLisp StdOut = printSexp . lispify
+outputLisp (OutFile str) = writeFile str . showSexp . lispify
 
 outputTo :: Output -> String -> IO ()
 outputTo StdOut = putStrLn
