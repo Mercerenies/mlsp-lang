@@ -210,7 +210,8 @@ resolvePublicName (Instance pos name args ctx decls) = do
             Just x -> return x
   (pkg, ref) <- lift . ExceptT . return . left (resolutionError pos) $
                 resolveReference (getPackage sym) conc (env, sym)
-  let inst = InstanceId pos args ctx decls
+  decls' <- mapM (handleFunc pos) decls
+  let inst = InstanceId pos args ctx decls'
   conc1 <- case ref of
              ConceptId pos0 name0 args0 ctx0 inner0 inst0 ->
                  return . ConceptId pos0 name0 args0 ctx0 inner0 $ inst : inst0
@@ -237,7 +238,6 @@ resolvePublicName (Meta pos decl) = do
 resolvePublicName (MetaDeclare pos _) =
     lift . throwE $ stdErrorPos NotYetImplemented pos "Meta calls"
 
--- TODO Call this from resolvePublicName
 resolveClassName :: ClassDecl ->
                     PublicResState Unvalidated [ClassInner Unvalidated]
 resolveClassName (Field pos name type_) = do
@@ -249,4 +249,3 @@ resolveClassName (MetaDeclClass pos _) = do
   lift . throwE $ stdErrorPos NotYetImplemented pos "Meta calls"
 
 -- TODO [()] is isomorphic to Nat??? Think about this!!!
--- TODO SourcePos is printing bizarrely; change Show for it if possible

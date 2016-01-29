@@ -54,7 +54,7 @@ data ValueId v = FunctionId SourcePos (FunctionDecl' v) |
                  ClassId SourcePos RawName [DSName] (Maybe TypeExpr) (Maybe [TypeExpr])
                      Bool (Map InnerName (ClassInner v)) |
                  ConceptId SourcePos RawName [DSName] Context
-                               [(RawName, Type)] [Instance] |
+                               [(RawName, Type)] [Instance v] |
                  GenericId SourcePos RawName Type [(SourcePos, FunctionDecl' v)] |
                  ConceptFuncId SourcePos RawName RawName -- Func Name, Conc Name
                  deriving (Show, Eq)
@@ -62,13 +62,12 @@ data ValueId v = FunctionId SourcePos (FunctionDecl' v) |
 data MetaId v = MetaId SourcePos FunctionDecl
                 deriving (Show, Eq)
 
--- ///// Support @identifier names here (and fix this elsewhere)
 data ClassInner v = FieldId SourcePos AtName TypeExpr |
                     MethodId SourcePos (FunctionDecl' v)
                     deriving (Show, Eq)
 
-data Instance = InstanceId SourcePos [TypeExpr] Context [FunctionDecl]
-                deriving (Show, Eq)
+data Instance v = InstanceId SourcePos [TypeExpr] Context [FunctionDecl' v]
+                  deriving (Show, Eq)
 
 instance Monoid (SymbolTable v) where
     mempty = SymbolTable mempty mempty

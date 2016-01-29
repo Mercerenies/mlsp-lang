@@ -398,11 +398,103 @@ instance Lispable AtName where
 instance Lispable RefName where
     -- name
     lispify (Raw x) = lispify x
-    lispify (Qualified pkg raw) = undefined -- /////
+    lispify (Qualified pkg raw) = Atom $ fromPackageName pkg ++ "." ++ getRawName raw
 
 instance Show a => Lispable (SymbolicName a) where
+    -- (q &rest names)
     -- name
-    lispify (QualifiedName xs) = undefined -- /////
+    lispify (QualifiedName xs) = List $ Symbol "q" : map lispify xs
+    lispify (BasicName x) = Atom $ show x
+    lispify (AtSign x) = Atom $ '@' : show x
+    lispify (DollarSign x) = Atom $ '$' : show x
+    lispify (PercentSign x) = Atom $ '%' : show x
 
 instance Lispable (SymbolInterface v) where
-    lispify = undefined -- /////
+    -- (symbols pkg private public)
+    lispify (SymbolInterface pkg pr pu) =
+        List [Symbol "symbols", lispify pkg, lispify pr, lispify pu]
+
+instance Lispable (PrivateTable v) where
+    -- (private &rest entries)
+    --   ; where entries are (pkg &rest hiding)
+    lispify (PrivateTable xs) = List $ Symbol "private" : map doEntry xs
+        where doEntry (pkg, names) = List $ lispify pkg : map lispify names
+
+instance Lispable (PublicTable v) where
+    -- (public table)
+    lispify (PublicTable sym) = List [Symbol "public", lispify sym]
+
+instance Lispable (SymbolTable v) where
+    -- (symbol-table values metas)
+    --   ; where values are (name id) and metas are (name id)
+    lispify (SymbolTable vv mm) = List [Symbol "symbol-table",
+                                        List . map onTuple $ Map.toList vv,
+                                        List . map onTuple $ Map.toList mm]
+        where onTuple (raw, val) = List [lispify raw, lispify val]
+
+instance Lispable (MetaId v) where
+    -- (meta pos decl)
+    lispify (MetaId pos decl) = List [Symbol "meta", lispify pos, lispify decl]
+
+instance Lispable (ValueId v) where
+    -- (function pos decl)
+    -- (type pos name (&rest args) expr)
+    -- (class pos name (&rest args) (&optional parent) (&optional (&rest children))
+    --     abstract &rest inners)
+    --   ; where inners are (name content)
+    -- (concept pos name (&rest args) ctx (&rest parts) &rest instances)
+    --   ; where parts are (name type) and instances are instance
+    -- (generic pos name type &rest instances)
+    --   ; where instaces are (pos decl)
+    -- (cfunction pos name conc-name)
+    lispify (FunctionId pos decl) = List [Symbol "function", lispify pos, lispify decl]
+    lispify (TypeSynonym pos name args expr) =
+        List [Symbol "type", lispify pos, lispify name,
+              List $ map lispify args, lispify expr]
+    lispify (ClassId pos name args parent children abstract inners) =
+        List $ [Symbol "class", lispify pos, lispify name, List $ map lispify args,
+                List parent', List children', lispify abstract] ++
+              map doInner (Map.toList inners)
+            where parent' = case parent of
+                              Nothing -> []
+                              Just x -> [lispify x]
+                  children' = case children of
+                                Nothing -> []
+                                Just xs -> map lispify xs
+                  doInner (k, v) = List [eitherLispify k, lispify v]
+                  eitherLispify (Left x) = lispify x
+                  eitherLispify (Right x) = lispify x
+    lispify (ConceptId pos name args ctx parts instances) =
+        List $ [Symbol "concept", lispify pos, lispify name, List $ map lispify args,
+                lispify ctx, List $ map doPart parts] ++ map doInstance instances
+            where doPart (name, type_) = List [lispify name, lispify type_]
+                  doInstance = lispify
+    lispify (GenericId pos name type_ instances) =
+        List $ [Symbol "generic", lispify pos, lispify name, lispify type_]
+             ++ map doInstance instances
+            where doInstance (pos, decl) = List [lispify pos, lispify decl]
+    lispify (ConceptFuncId pos name conc) =
+        List [Symbol "cfunction", lispify pos, lispify name, lispify conc]
+
+instance Lispable (FunctionDecl' v) where
+    -- (name (&optional type) &rest cases)
+    --   ; where cases is a list of ((&rest pattern) stmt)
+    lispify (FunctionDecl' type_ name insides) =
+        List $ [lispify name, optionalType] ++ map translateInside insides
+        where optionalType = case type_ of
+                               Just x -> List [lispify x]
+                               Nothing -> List []
+              translateInside (ptn, stmt) = List [List $ map lispify ptn, lispify stmt]
+
+instance Lispable (ClassInner v) where
+    -- (field pos name expr)
+    -- (method pos decl)
+    lispify (FieldId pos name expr) =
+        List [Symbol "field", lispify pos, lispify name, lispify expr]
+    lispify (MethodId pos decl) =
+        List [Symbol "method", lispify pos, lispify decl]
+
+instance Lispable (Instance v) where
+    -- (instance pos args ctx &rest decls)
+    lispify (InstanceId pos args ctx decls) =
+        List $ [lispify pos, List $ map lispify args, lispify ctx] ++ map lispify decls

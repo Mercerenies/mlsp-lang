@@ -40,7 +40,9 @@ main = do
                            Right act -> loadMain inp act
               case result' of
                 Left err -> die $ show err
-                Right act -> outputTo out $ show act
+                Right (act, _, warns) -> do
+                             mapM_ (hPrint stderr) warns
+                             output out act
     Right (DoParse (Just inp) out, _) -> do
               result <- runExceptT $ parseFile inp
               case result of
