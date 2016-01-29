@@ -5,7 +5,11 @@ module Lang.Printer(Output(..), SExpr(..), Lispable(..),
 --      concepts (possibly with some way to specify what must be implemented
 --      to avoid mutual infinite recursion like in Haskell typeclasses)
 
+import Lang.Identifier
 import Lang.Parser
+import Lang.SymbolTable
+import Data.Typeable
+import qualified Data.Map as Map
 import qualified Lang.Tokens as Tok
 import Lang.Operator
 import Text.Parsec.Pos(SourcePos, sourceLine, sourceColumn)
@@ -29,8 +33,35 @@ showSexp (List xs) = "(" ++ unwords (map showSexp xs) ++ ")"
 printSexp :: Show a => SExpr a -> IO ()
 printSexp = putStrLn . showSexp
 
+maybeToOutput :: Maybe FilePath -> Output
+maybeToOutput (Just x) = OutFile x
+maybeToOutput Nothing = StdOut
+
+output :: Lispable a => Output -> a -> IO ()
+output StdOut = printSexp . lispify
+output (OutFile str) = writeFile str . showSexp . lispify
+
+outputTo :: Output -> String -> IO ()
+outputTo StdOut = putStrLn
+outputTo (OutFile str) = writeFile str
+
+----
+
+phantomProxy :: f v -> Proxy v
+phantomProxy _ = Proxy
+
+validStatus :: Typeable v => Proxy v -> String
+validStatus v
+    | typeRep v == typeRep unv = "unvalidated"
+    | typeRep v == typeRep val = "validated"
+    | otherwise = "???"
+    where unv = Proxy :: Proxy Unvalidated
+          val = Proxy :: Proxy Validated
+
 lispify' :: Lispable x => (String, x) -> SExpr String
 lispify' (str, tpe) = List [Atom str, lispify tpe]
+
+-- Parser --
 
 instance Lispable FileData where
     -- ((package name) &rest decl)
@@ -338,14 +369,40 @@ instance Lispable a => Lispable [a] where
 instance Lispable SourcePos where
     lispify src = List [Symbol . show $ sourceLine src, Symbol . show $ sourceColumn src]
 
-maybeToOutput :: Maybe FilePath -> Output
-maybeToOutput (Just x) = OutFile x
-maybeToOutput Nothing = StdOut
+-- Environment --
 
-output :: Lispable a => Output -> a -> IO ()
-output StdOut = printSexp . lispify
-output (OutFile str) = writeFile str . showSexp . lispify
+instance Typeable v => Lispable (Environment v) where
+    -- (environment validated &rest packages)
+    --   ; where packages are (name symb)
+    lispify (Environment env) =
+        List $ [Symbol "environment",
+                Symbol (validStatus . phantomProxy $ Environment env)]
+             ++ map (\(k, v) -> List [lispify k, lispify v]) (Map.toList env)
 
-outputTo :: Output -> String -> IO ()
-outputTo StdOut = putStrLn
-outputTo (OutFile str) = writeFile str
+instance Lispable PackageName where
+    -- name
+    lispify = Atom . fromPackageName
+
+instance Lispable RawName where
+    -- name
+    lispify = Atom . getRawName
+
+instance Lispable DSName where
+    -- name
+    lispify (DSName x) = Atom $ "$" ++ x
+
+instance Lispable AtName where
+    -- name
+    lispify (AtName x) = Atom $ "@" ++ x
+
+instance Lispable RefName where
+    -- name
+    lispify (Raw x) = lispify x
+    lispify (Qualified pkg raw) = undefined -- /////
+
+instance Show a => Lispable (SymbolicName a) where
+    -- name
+    lispify (QualifiedName xs) = undefined -- /////
+
+instance Lispable (SymbolInterface v) where
+    lispify = undefined -- /////

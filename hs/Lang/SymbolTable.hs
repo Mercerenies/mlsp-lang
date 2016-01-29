@@ -13,6 +13,7 @@ import Lang.Error
 import Lang.Parser
 import Data.Monoid
 import Data.Maybe(catMaybes)
+import Data.Typeable
 import Data.Map(Map)
 import qualified Data.Map as Map
 import Control.Monad
@@ -42,8 +43,8 @@ data SymbolTable v = SymbolTable {getValues :: Map RawName (ValueId v),
 -- the arguments to a class, type, or other construct have been validated.
 -- This does NOT indicate that the body has been validated; that happens in
 -- compilation. This is merely for the names in the arguments.
-data Validated
-data Unvalidated
+data Validated deriving (Typeable)
+data Unvalidated deriving (Typeable)
 
 data FunctionDecl' v = FunctionDecl' (Maybe Type) RawName FunctionBody
                        deriving (Show, Eq)
