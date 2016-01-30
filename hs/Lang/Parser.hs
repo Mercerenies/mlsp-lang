@@ -401,7 +401,7 @@ instanceDecl :: EParser Decl
 instanceDecl = do
   keyword "instance"
   newlines
-  name <- identifier -- Dotted?
+  name <- identifier -- TODO Dotted?
   args <- option [] $ do
                 operator "["
                 newlines

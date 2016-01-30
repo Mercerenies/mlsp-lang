@@ -2,7 +2,7 @@ module Lang.SymbolTable(Environment(..), SymbolInterface(..),
                         PublicTable(..), PrivateTable(..), FunctionDecl'(..),
                         SymbolTable(..), Validated, Unvalidated, ValueId(..),
                         MetaId(..), ClassInner(..), Instance(..), InnerName,
-                        GenMethod(..),
+                        GenMethod(..), addPackage, lookupPackage,
                         lookupValue, lookupMeta, lookupPublicValue, lookupPublicMeta,
                         addValue, addMeta, addPublicValue, addPublicMeta,
                         updateValue, updatePublicValue, updatePackageValue,
@@ -79,6 +79,13 @@ data GenMethod v = GenMethod SourcePos (FunctionDecl' v)
 instance Monoid (SymbolTable v) where
     mempty = SymbolTable mempty mempty
     SymbolTable a0 b0 `mappend` SymbolTable a1 b1 = SymbolTable (a0 <> a1) (b0 <> b1)
+
+addPackage :: SymbolInterface v -> Environment v -> Environment v
+addPackage sym@(SymbolInterface {getPackage = pkg}) (Environment env) =
+    Environment $ Map.insert pkg sym env
+
+lookupPackage :: PackageName -> Environment v -> Maybe (SymbolInterface v)
+lookupPackage pkg (Environment env) = Map.lookup pkg env
 
 lookupValue :: RawName -> SymbolTable v -> Maybe (ValueId v)
 lookupValue str (SymbolTable vv _) = Map.lookup str vv

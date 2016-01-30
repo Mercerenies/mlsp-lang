@@ -9,7 +9,7 @@ import Lang.Error
 import Lang.SymbolTable
 import Data.Maybe(catMaybes)
 -- import Data.Map(Map)
-import qualified Data.Map as Map
+import qualified Data.Map as Map(empty)
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.RWS
@@ -65,8 +65,7 @@ loadNames pkg (FileData pkgDecl decls) = do
     private <- resolvePrivateNames decls
     let sym0 = SymbolInterface pkg' [] [] private (PublicTable mempty)
     (env1, sym1) <- resolvePublicNames (env0, sym0) decls
-    let Environment env1' = env1
-        env2 = Environment $ Map.insert pkg' sym1 env1'
+    let env2 = addPackage sym1 env1
     modify tail
     return env2
 
