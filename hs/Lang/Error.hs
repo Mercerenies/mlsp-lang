@@ -8,6 +8,7 @@ module Lang.Error(LangError(..), ErrorType(..), Warning(..),
 import Text.Parsec.Error
 import Text.Parsec.Pos
 import Lang.Identifier
+import Data.Void
 import Control.Monad.Trans.Except
 import Control.Arrow
 
@@ -25,7 +26,7 @@ data ErrorType = NameError | PackageError | ReferenceError |
 data ErrorPos = NoPos | Pos SourcePos | FilePos FilePath
                 deriving (Show, Eq)
 
-data Warning = CircularWarning String
+data Warning = Warning Void
                deriving (Show, Read, Eq)
 
 instance Show LangError where
