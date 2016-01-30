@@ -1,7 +1,9 @@
 -- Based on MLSP5.txt
 
+-- ///// source-of-instances (Move instances and generic implementations to
+--                            a new slot in the symbol interface)
+
 import Lang.Printer
-import Lang.PrettyPrinter
 import Lang.Loader
 import Lang.Reader
 import Lang.Options

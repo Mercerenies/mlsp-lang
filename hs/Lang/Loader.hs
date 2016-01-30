@@ -63,7 +63,7 @@ loadNames pkg (FileData pkgDecl decls) = do
     modify (pkg' :)
     env0 <- mconcat <$> mapM resolveImport decls
     private <- resolvePrivateNames decls
-    let sym0 = SymbolInterface pkg' private (PublicTable mempty)
+    let sym0 = SymbolInterface pkg' [] [] private (PublicTable mempty)
     (env1, sym1) <- resolvePublicNames (env0, sym0) decls
     let Environment env1' = env1
         env2 = Environment $ Map.insert pkg' sym1 env1'
@@ -138,16 +138,11 @@ resolvePublicName (Function pos decl) = do
              Nothing -> lift . throwE $ invalidNameError pos name
              Just x -> return x
   case resolveReference (getPackage sym) name' (env, sym) of
-    Right (pkg, GenericId pos0 name0 type0 inst0) ->
+    Right (_, GenericId {}) ->
         do
           decl' <- handleFunc pos decl
-          let gen1 = GenericId pos0 name0 type0 $ (pos, decl') : inst0
-              (env', sym') = case pkg of
-                               PackageName [] ->
-                                   (env, updatePublicValue name0 gen1 sym)
-                               PackageName _ ->
-                                   (updatePackageValue name0 gen1 pkg env, sym)
-          put (env', sym')
+          let sym' = addGenMethod (GenMethod pos decl') sym
+          put (env, sym')
     Right (PackageName (_:_), _) ->
         case name' of
           Raw name'' -> newFunction (env, sym) (pos, decl) name''
@@ -193,7 +188,7 @@ resolvePublicName (Concept pos name args ctx inner) = do
   name' <- toIdName pos name
   args' <- mapM (toArgName pos) args
   inner' <- (mapM $ \(x, y) -> (,) <$> toIdName pos x <*> pure y) inner
-  let concept = ConceptId pos name' args' ctx inner' []
+  let concept = ConceptId pos name' args' ctx inner'
   sym' <- throwMaybe (nameConflictError pos name) $ addPublicValue name' concept sym
   put (env, sym')
   forM_ inner' $ \(fname, _) -> do
@@ -205,27 +200,23 @@ resolvePublicName (Concept pos name args ctx inner) = do
 resolvePublicName (Instance pos name args ctx decls) = do
   -- Merge the instance into its concept
   (env, sym) <- get
-  conc <- case toRefName name of
-            Nothing -> lift . throwE $ invalidNameError pos name
-            Just x -> return x
-  (pkg, ref) <- lift . ExceptT . return . left (resolutionError pos) $
-                resolveReference (getPackage sym) conc (env, sym)
+  name' <- case toRawName name of
+             Nothing -> lift . throwE $ invalidNameError pos name
+             Just x -> return x
+  (_, ref) <- lift . ExceptT . return . left (resolutionError pos) $
+              resolveReference (getPackage sym) (Raw name') (env, sym)
   decls' <- mapM (handleFunc pos) decls
-  let inst = InstanceId pos args ctx decls'
-  conc1 <- case ref of
-             ConceptId pos0 name0 args0 ctx0 inner0 inst0 ->
-                 return . ConceptId pos0 name0 args0 ctx0 inner0 $ inst : inst0
+  let inst = InstanceId pos name' args ctx decls'
+  sym' <- case ref of
+             ConceptId {} ->
+                 return $ addInstance inst sym
              _ -> lift $ throwE (stdErrorPos ReferenceError pos $
                                              show name ++ " is not a concept")
-  let conc' = getRefIdName conc
-      (env', sym') = case pkg of
-                       PackageName [] -> (env, updatePublicValue conc' conc1 sym)
-                       PackageName _  -> (updatePackageValue conc' conc1 pkg env, sym)
-  put (env', sym')
+  put (env, sym')
 resolvePublicName (Generic pos name type_) = do
   (env, sym) <- get
   name' <- toIdName pos name
-  let gen = GenericId pos name' type_ []
+  let gen = GenericId pos name' type_
   sym' <- throwMaybe (nameConflictError pos name) $ addPublicValue name' gen sym
   put (env, sym')
 resolvePublicName (Meta pos decl) = do

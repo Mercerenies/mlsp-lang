@@ -410,9 +410,10 @@ instance Show a => Lispable (SymbolicName a) where
     lispify (PercentSign x) = Atom $ '%' : show x
 
 instance Lispable (SymbolInterface v) where
-    -- (symbols pkg private public)
-    lispify (SymbolInterface pkg pr pu) =
-        List [Symbol "symbols", lispify pkg, lispify pr, lispify pu]
+    -- (symbols pkg (&rest instances) (&rest gens) private public)
+    lispify (SymbolInterface pkg insts gens pr pu) =
+        List [Symbol "symbols", lispify pkg, List $ map lispify insts,
+              List $ map lispify gens, lispify pr, lispify pu]
 
 instance Lispable (PrivateTable v) where
     -- (private &rest entries)
@@ -442,10 +443,9 @@ instance Lispable (ValueId v) where
     -- (class pos name (&rest args) (&optional parent) (&optional (&rest children))
     --     abstract &rest inners)
     --   ; where inners are (name content)
-    -- (concept pos name (&rest args) ctx (&rest parts) &rest instances)
-    --   ; where parts are (name type) and instances are instance
-    -- (generic pos name type &rest instances)
-    --   ; where instaces are (pos decl)
+    -- (concept pos name (&rest args) ctx &rest parts)
+    --   ; where parts are (name type)
+    -- (generic pos name type)
     -- (cfunction pos name conc-name)
     lispify (FunctionId pos decl) = List [Symbol "function", lispify pos, lispify decl]
     lispify (TypeSynonym pos name args expr) =
@@ -464,15 +464,12 @@ instance Lispable (ValueId v) where
                   doInner (k, v) = List [eitherLispify k, lispify v]
                   eitherLispify (Left x) = lispify x
                   eitherLispify (Right x) = lispify x
-    lispify (ConceptId pos name args ctx parts instances) =
+    lispify (ConceptId pos name args ctx parts) =
         List $ [Symbol "concept", lispify pos, lispify name, List $ map lispify args,
-                lispify ctx, List $ map doPart parts] ++ map doInstance instances
+                lispify ctx] ++ map doPart parts
             where doPart (name, type_) = List [lispify name, lispify type_]
-                  doInstance = lispify
-    lispify (GenericId pos name type_ instances) =
+    lispify (GenericId pos name type_) =
         List $ [Symbol "generic", lispify pos, lispify name, lispify type_]
-             ++ map doInstance instances
-            where doInstance (pos, decl) = List [lispify pos, lispify decl]
     lispify (ConceptFuncId pos name conc) =
         List [Symbol "cfunction", lispify pos, lispify name, lispify conc]
 
@@ -495,6 +492,12 @@ instance Lispable (ClassInner v) where
         List [Symbol "method", lispify pos, lispify decl]
 
 instance Lispable (Instance v) where
-    -- (instance pos args ctx &rest decls)
-    lispify (InstanceId pos args ctx decls) =
-        List $ [lispify pos, List $ map lispify args, lispify ctx] ++ map lispify decls
+    -- (instance pos name args ctx &rest decls)
+    lispify (InstanceId pos name args ctx decls) =
+        List $ [Symbol "instance", lispify pos, lispify name, List $ map lispify args,
+                lispify ctx] ++ map lispify decls
+
+instance Lispable (GenMethod v) where
+    -- (gen-method pos decl)
+    lispify (GenMethod pos decl) = List [Symbol "gen-method", lispify pos,
+                                         lispify decl]
