@@ -3,6 +3,7 @@
 -- ///// source-of-instances (Move instances and generic implementations to
 --                            a new slot in the symbol interface)
 
+import Lang.Validator -- DEBUG CODE
 import Lang.Printer
 import Lang.Loader
 import Lang.Reader

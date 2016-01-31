@@ -1,4 +1,4 @@
-module Lang.Loader(ReadState(..), NameState,
+module Lang.Loader(ReadState(..), NameState, PublicResState,
                    loadMain, loadNames) where
 
 import Text.Parsec.Pos
