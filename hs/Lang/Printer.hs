@@ -155,15 +155,15 @@ instance Lispable Context where
 
 instance Lispable TypeExpr where
     -- (op pos expr)
-    -- (tuple-type pos acc &rest types)
-    -- (named-type pos name acc &rest args)
+    -- (tuple-type pos &rest types)
+    -- (named-type pos name &rest args)
     -- (func-type pos (&rest args) result)
     lispify (TypeOper pos oe) =
         List $ [Symbol "op", lispify pos, lispify oe]
-    lispify (Tuple pos xs acc) =
-        List $ [Symbol "tuple-type", lispify pos, lispify acc] ++ map lispify xs
-    lispify (Named pos name args acc) =
-        List $ [Symbol "named-type", lispify pos, Atom name, lispify acc] ++
+    lispify (Tuple pos xs) =
+        List $ [Symbol "tuple-type", lispify pos] ++ map lispify xs
+    lispify (Named pos name args) =
+        List $ [Symbol "named-type", lispify pos, Atom name] ++
              map lispify args
     lispify (Func pos args result) =
         List $ [Symbol "func-type", lispify pos, List $ map lispify args, lispify result]
@@ -298,9 +298,11 @@ instance Lispable ForOp where
     lispify ForEq = Symbol "="
     lispify ForBind = Symbol "<-"
 
+{-
 instance Lispable Access where
     lispify Read = Symbol "read"
     lispify ReadWrite = Symbol "read-write"
+-}
 
 instance Lispable Op where
     lispify Plus = Symbol "+"

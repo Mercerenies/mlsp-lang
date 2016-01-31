@@ -5,7 +5,7 @@ import something.SomethingElse
 ## Comment
 
 class XYZ[$1]
-  @x :: Int
+  @x :: Int!
   @y :: $1
   @z :: Int
 end

@@ -28,9 +28,8 @@ validateEnv (Environment env) = do
   let (w, a) = mapAccumR (\w0 (a, _, w1) -> (w0 ++ w1, a)) [] env'
   return (Environment a, w)
 
--- ///// Validatable instances for everything
 instance Validatable SymbolInterface where
-    validate = undefined
+    validate _ = undefined -- TODO This
 {-
     validate (SymbolInterface pkg insts gens pr pu) =
         SymbolInterface <$> pure pkg <*> traverse validate insts <*>

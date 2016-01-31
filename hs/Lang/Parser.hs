@@ -1,7 +1,7 @@
 module Lang.Parser(FileData(..), Decl(..), Type(..), TypeExpr(..), Context(..), Expr(..),
                    Conditional(..), Pattern(..), Literal(..), FunctionDecl(..),
                    FunctionBody,
-                   ClassDecl(..), Access(..), IfOp(..), ForOp(..), Call(..), MetaCall(..),
+                   ClassDecl(..), IfOp(..), ForOp(..), Call(..), MetaCall(..),
                    parseCode, file, toplevel) where
 
 -- TODO Consider making SourcePos a monad rather than a property of EVERYTHING
@@ -66,8 +66,8 @@ newtype Context = Context [TypeExpr]
     deriving (Show, Eq)
 
 data TypeExpr = TypeOper SourcePos (OpExpr TypeOp TypeExpr) |
-                Tuple SourcePos [TypeExpr] Access |
-                Named SourcePos String [TypeExpr] Access |
+                Tuple SourcePos [TypeExpr] |
+                Named SourcePos String [TypeExpr] |
                 Func SourcePos [TypeExpr] TypeExpr
                 deriving (Show, Eq)
 
@@ -120,9 +120,6 @@ data MetaSpecial = Parent TypeExpr |
 data Conditional = CondExpr Expr |
                    BindExpr Pattern Expr
                    deriving (Show, Eq)
-
-data Access = Read | ReadWrite
-              deriving (Show, Read, Eq, Ord)
 
 data IfOp = If | Unless
             deriving (Show, Read, Eq, Ord)
@@ -347,9 +344,8 @@ tupleTypeExpr = do
   case contents of
     [single] -> return single -- Simple grouping parens
     _ -> do
-      access <- accessSuffix
       pos <- getPosition
-      return $ Tuple pos contents access
+      accessSuffix $ Tuple pos contents
 
 namedTypeExpr :: EParser TypeExpr
 namedTypeExpr = do
@@ -361,9 +357,8 @@ namedTypeExpr = do
                   newlines
                   operator "]"
                   return args'
-  access <- accessSuffix
   pos <- getPosition
-  return $ Named pos name args access
+  accessSuffix $ Named pos name args
 
 funcTypeExpr :: EParser TypeExpr
 funcTypeExpr = do
@@ -846,8 +841,10 @@ idPattern :: EParser Pattern
 idPattern = IdPattern <$> getPosition <*> identifier
 
 -- TODO Desugar this immediately
-accessSuffix :: EParser Access
-accessSuffix = option Read $ ReadWrite <$ operator "!"
+accessSuffix :: TypeExpr -> EParser TypeExpr
+accessSuffix type_ = option type_ $ operator "!" *>
+                     (TypeOper <$> getPosition <*> (intersection <$> getPosition))
+    where intersection pos = Inf (OpExpr type_) Inter . OpExpr $ Named pos "W" []
 
 metaCall :: EParser (Either MetaCall MetaSpecial)
 metaCall = do
