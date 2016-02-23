@@ -21,9 +21,11 @@ import qualified Data.Map as Map
 import Control.Monad
 import Text.Parsec.Pos
 
+-- Validates by checking all of the symbol interfaces
 newtype Environment v = Environment (Map PackageName (SymbolInterface v))
     deriving (Show, Eq)
 
+-- Validates all constituent instances, methods, and the tables
 data SymbolInterface v = SymbolInterface {getPackage :: PackageName,
                                           getInstances :: [Instance v],
                                           getGenMethods :: [GenMethod v],
@@ -31,9 +33,11 @@ data SymbolInterface v = SymbolInterface {getPackage :: PackageName,
                                           getSPublicTable :: PublicTable v}
                          deriving (Show, Eq)
 
+-- Validates by checking that all referenced names are valid
 newtype PrivateTable v = PrivateTable {getPrivateTable :: [(PackageName, [RawName])]}
     deriving (Show, Eq)
 
+-- Validates by validating the constituent table
 newtype PublicTable v = PublicTable {getPublicTable :: SymbolTable v}
     deriving (Show, Eq)
 
@@ -73,6 +77,7 @@ data ClassInner v = FieldId SourcePos AtName TypeExpr |
 data Instance v = InstanceId SourcePos RawName [TypeExpr] Context [FunctionDecl' v]
                   deriving (Show, Eq)
 
+-- Validates by validating the function declaration
 data GenMethod v = GenMethod SourcePos (FunctionDecl' v)
                    deriving (Show, Eq)
 
@@ -129,9 +134,9 @@ addPublicValue :: RawName -> ValueId v -> SymbolInterface v -> Maybe (SymbolInte
 addPublicValue str val sym@(SymbolInterface {getSPublicTable = PublicTable pu}) =
     (\x -> sym {getSPublicTable = x}) . PublicTable <$> addValue str val pu
 
-resolveReference :: PackageName -> RefName -> (Environment v, SymbolInterface v) ->
+resolveReference :: RefName -> (Environment v, SymbolInterface v) ->
                     Either ResolutionError (PackageName, ValueId v)
-resolveReference _ (Raw str) (Environment env, sym) =
+resolveReference (Raw str) (Environment env, sym) =
     let local = (,) <$> pure (PackageName []) <*> lookupPublicValue str sym
         foreigns = lookupPrivateValue (Environment env) str sym
     in case (local, foreigns) of
@@ -142,8 +147,8 @@ resolveReference _ (Raw str) (Environment env, sym) =
              Left $ Ambiguous name (PackageName [] : pkgs)
          (Just _, Right (pkg, _)) ->
              Left $ Ambiguous (getRawName str) [pkg, PackageName []]
-resolveReference curPkg (Qualified pkg str) (Environment env, sym)
-    | pkg == curPkg =
+resolveReference (Qualified pkg str) (Environment env, sym)
+    | pkg == getPackage sym =
         case lookupPublicValue str sym of
           Nothing -> Left . NoSuchName $ getRawName str
           Just x -> Right (PackageName [], x)

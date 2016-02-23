@@ -136,7 +136,7 @@ resolvePublicName (Function pos decl) = do
   name' <- case toRefName name of
              Nothing -> lift . throwE $ invalidNameError pos name
              Just x -> return x
-  case resolveReference (getPackage sym) name' (env, sym) of
+  case resolveReference name' (env, sym) of
     Right (_, GenericId {}) ->
         do
           decl' <- handleFunc pos decl
@@ -203,7 +203,7 @@ resolvePublicName (Instance pos name args ctx decls) = do
              Nothing -> lift . throwE $ invalidNameError pos name
              Just x -> return x
   (_, ref) <- lift . ExceptT . return . left (resolutionError pos) $
-              resolveReference (getPackage sym) (Raw name') (env, sym)
+              resolveReference (Raw name') (env, sym)
   decls' <- mapM (handleFunc pos) decls
   let inst = InstanceId pos name' args ctx decls'
   sym' <- case ref of

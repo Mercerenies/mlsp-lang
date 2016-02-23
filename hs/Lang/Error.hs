@@ -19,7 +19,7 @@ data LangError = ParserError ParseError |
                  StdError ErrorType ErrorPos String
                  deriving (Eq)
 
-data ErrorType = NameError | PackageError | ReferenceError |
+data ErrorType = NameError | PackageError | ReferenceError | ArgumentError |
                  NotYetImplemented | MiscError
                  deriving (Show, Read, Eq, Ord, Enum)
 
