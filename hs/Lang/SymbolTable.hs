@@ -43,6 +43,7 @@ newtype PublicTable v = PublicTable {getPublicTable :: SymbolTable v}
 
 type InnerName = Either AtName RawName
 
+-- Validates by validating the values and the metas
 data SymbolTable v = SymbolTable {getValues :: Map RawName (ValueId v),
                                   getMetas :: Map RawName (MetaId v)}
                    deriving (Show, Eq)
@@ -54,6 +55,8 @@ data SymbolTable v = SymbolTable {getValues :: Map RawName (ValueId v),
 data Validated deriving (Typeable)
 data Unvalidated deriving (Typeable)
 
+-- Validates by checking the type name, if supplied; If no type is supplied,
+-- validation for FunctionDecl' is free
 data FunctionDecl' v = FunctionDecl' (Maybe Type) RawName FunctionBody
                        deriving (Show, Eq)
 
@@ -67,16 +70,22 @@ data ValueId v = FunctionId SourcePos (FunctionDecl' v) |
                  ConceptFuncId SourcePos RawName RawName -- Func Name, Conc Name
                  deriving (Show, Eq)
 
-data MetaId v = MetaId SourcePos FunctionDecl
+-- Validates by validating the function declaration
+data MetaId v = MetaId SourcePos (FunctionDecl' v)
                 deriving (Show, Eq)
 
 data ClassInner v = FieldId SourcePos AtName TypeExpr |
                     MethodId SourcePos (FunctionDecl' v)
                     deriving (Show, Eq)
 
+-- Loading validates that the concept exists
+-- Validates by checking that the number of arguments is correct, that the
+-- arguments are all valid, that the context is valid, and that the function
+-- declarations are valid
 data Instance v = InstanceId SourcePos RawName [TypeExpr] Context [FunctionDecl' v]
                   deriving (Show, Eq)
 
+-- Loading validates that the generic method binds to a generic declaration
 -- Validates by validating the function declaration
 data GenMethod v = GenMethod SourcePos (FunctionDecl' v)
                    deriving (Show, Eq)

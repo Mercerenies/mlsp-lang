@@ -64,6 +64,12 @@ validateTypeExpr (Named pos name exprs) = do
                             (show $ length exprs)))
   return ()
 
+validateType :: Type -> ValidateState ()
+validateType (Type expr ctx) = validateTypeExpr expr >> validateContext ctx
+
+validateContext :: Context -> ValidateState ()
+validateContext (Context ctx) = mapM_ validateTypeExpr ctx
+
 instance Validatable SymbolInterface where
     validate (SymbolInterface pkg insts gens pr pu) =
         SymbolInterface <$> pure pkg <*> traverse validate insts <*>
@@ -84,13 +90,34 @@ instance Validatable PublicTable where
     validate (PublicTable v) = PublicTable <$> validate v
 
 instance Validatable Instance where
-    validate = undefined
+    validate (InstanceId pos name args ctx funcs) =
+        do
+          envsym <- ask
+          (_, ConceptId _ _ parms _ _) <- resolveWithError pos (Raw name) envsym
+          unless (length parms == length args) $
+                 lift . throwE $ stdErrorPos ArgumentError pos $
+                      "Expecting " ++ show (length parms) ++
+                      " args to " ++ show name ++ ", got " ++ show (length args)
+          mapM_ validateTypeExpr args
+          validateContext ctx
+          InstanceId <$> pure pos <*> pure name <*> pure args <*> pure ctx <*>
+                         mapM validate funcs
 
 instance Validatable GenMethod where
     validate (GenMethod pos decl) = GenMethod pos <$> validate decl
 
 instance Validatable SymbolTable where
-    validate = undefined
+    validate (SymbolTable vs ms) =
+        SymbolTable <$> mapM validate vs <*> mapM validate ms
 
 instance Validatable FunctionDecl' where
+    validate (FunctionDecl' type_ name body) =
+        FunctionDecl' <$> handle type_ <*> pure name <*> pure body
+            where handle Nothing = return Nothing
+                  handle (Just x) = Just x <$ validateType x
+
+instance Validatable ValueId where
     validate = undefined
+
+instance Validatable MetaId where
+    validate (MetaId pos decl) = MetaId pos <$> validate decl

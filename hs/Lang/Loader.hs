@@ -39,6 +39,7 @@ type NameState = RWST ReadState [Warning] [PackageName] (ExceptT LangError IO)
 type PublicResState v =
     RWST () [Warning] (Environment v, SymbolInterface v) (ExceptT LangError IO)
 
+-- Loads the main module from the parse data.
 loadMain :: String -> FileData
             -> IO (Either LangError (Environment Unvalidated, [PackageName], [Warning]))
 loadMain str dat = runExceptT $ runRWST (loadNames (fromPackageName mainPackageName) dat)
@@ -221,7 +222,7 @@ resolvePublicName (Generic pos name type_) = do
 resolvePublicName (Meta pos decl) = do
   (env, sym) <- get
   let FunctionDecl _ name _ = decl
-      meta = MetaId pos decl
+  meta <- MetaId pos <$> handleFunc pos decl
   name' <- toIdName pos name
   sym' <- throwMaybe (nameConflictError pos name) $ addPublicMeta name' meta sym
   put (env, sym')
