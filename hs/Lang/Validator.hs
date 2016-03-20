@@ -31,7 +31,7 @@ validateEnv (Environment env) = do
   env' <- forM env $ \sym ->
               runRWST (validate sym)
                           (Environment $ Map.delete (getPackage sym) env, sym) ()
-  let (w, a) = mapAccumR (\w0 (a, _, w1) -> (w0 ++ w1, a)) [] env'
+  let (w, a) = mapAccumR (\w0 (a', _, w1) -> (w0 ++ w1, a')) [] env'
   return (Environment a, w)
 
 resolveWithError :: SourcePos -> RefName -> (Environment v, SymbolInterface v) ->
@@ -77,13 +77,13 @@ instance Validatable SymbolInterface where
 
 instance Validatable PrivateTable where
     validate (PrivateTable pr) = do
-      traverse checkName (concatMap (\(x0, xs) -> map (\x1 -> (x0, x1)) xs) pr)
+      mapM_ checkName (concatMap (\(x0, xs) -> map (\x1 -> (x0, x1)) xs) pr)
       return $ PrivateTable pr
         where checkName (pkg, raw) = do
                                     envsym <- ask
                                     let ref = Qualified pkg raw
                                     -- TODO Actual position here, not newPos
-                                    resolveWithError (newPos "" 0 0) ref envsym
+                                    void $ resolveWithError (newPos "" 0 0) ref envsym
                                     return ()
 
 instance Validatable PublicTable where

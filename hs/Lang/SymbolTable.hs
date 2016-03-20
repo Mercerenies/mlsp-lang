@@ -60,6 +60,7 @@ data Unvalidated deriving (Typeable)
 data FunctionDecl' v = FunctionDecl' (Maybe Type) RawName FunctionBody
                        deriving (Show, Eq)
 
+-- FunctionId: Validates by validating the
 data ValueId v = FunctionId SourcePos (FunctionDecl' v) |
                  TypeSynonym SourcePos RawName [DSName] TypeExpr |
                  ClassId SourcePos RawName [DSName] (Maybe TypeExpr) (Maybe [TypeExpr])
@@ -93,6 +94,10 @@ data GenMethod v = GenMethod SourcePos (FunctionDecl' v)
 instance Monoid (SymbolTable v) where
     mempty = SymbolTable mempty mempty
     SymbolTable a0 b0 `mappend` SymbolTable a1 b1 = SymbolTable (a0 <> a1) (b0 <> b1)
+
+instance Monoid (Environment v) where
+    mempty = Environment mempty
+    (Environment a) `mappend` (Environment b) = Environment $ a `mappend` b
 
 addPackage :: SymbolInterface v -> Environment v -> Environment v
 addPackage sym@(SymbolInterface {getPackage = pkg}) (Environment env) =

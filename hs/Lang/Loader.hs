@@ -20,10 +20,6 @@ import System.FilePath
 data ReadState = ReadState {getToplevelDirectory :: FilePath,
                             getCurrentFilename :: FilePath}
 
-instance Monoid (Environment v) where
-    mempty = Environment mempty
-    (Environment a) `mappend` (Environment b) = Environment $ a `mappend` b
-
 -- Name State
 -- Reader: Read state
 -- Writer: Warnings
@@ -155,11 +151,11 @@ resolvePublicName (Function pos decl) = do
                       (SourcePos, FunctionDecl) ->
                       RawName ->
                       PublicResState Unvalidated ()
-       newFunction (env, sym) (pos, decl) name' = do
-           decl' <- handleFunc pos decl
-           let func = FunctionId pos decl'
+       newFunction (env, sym) (pos0, decl0) name' = do
+           decl' <- handleFunc pos0 decl0
+           let func = FunctionId pos0 decl'
            case addPublicValue name' func sym of
-             Nothing -> lift . throwE $ nameConflictError pos (getRawName name')
+             Nothing -> lift . throwE $ nameConflictError pos0 (getRawName name')
              Just sym' -> put (env, sym')
 resolvePublicName (TypeDecl pos name args expr) = do
   -- Add the type to the current package
@@ -172,7 +168,7 @@ resolvePublicName (TypeDecl pos name args expr) = do
   put (env, sym')
 resolvePublicName (Class pos name args parent children abstr decls) = do
   (env, sym) <- get
-  let declError pos = nameConflictError pos . getInnerName . classInnerName
+  let declError pos0 = nameConflictError pos0 . getInnerName . classInnerName
   name' <- toIdName pos name
   args' <- mapM (toArgName pos) args
   decls' <- concat <$> mapM resolveClassName decls

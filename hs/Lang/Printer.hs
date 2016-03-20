@@ -238,7 +238,7 @@ instance Lispable Expr where
                        List $ [Atom name, maybeType type_] ++ map doImpl impl
                    maybeType (Just x) = List [lispify x]
                    maybeType Nothing = List []
-                   doImpl (ptns, expr) = List [List $ map lispify ptns, lispify expr]
+                   doImpl (ptns, expr1) = List [List $ map lispify ptns, lispify expr1]
     lispify (Lambda pos args expr) =
         List $ [Symbol "lambda", lispify pos, List $ map Atom args, lispify expr]
     lispify (MetaExpr pos decl) =
@@ -469,7 +469,7 @@ instance Lispable (ValueId v) where
     lispify (ConceptId pos name args ctx parts) =
         List $ [Symbol "concept", lispify pos, lispify name, List $ map lispify args,
                 lispify ctx] ++ map doPart parts
-            where doPart (name, type_) = List [lispify name, lispify type_]
+            where doPart (name1, type_) = List [lispify name1, lispify type_]
     lispify (GenericId pos name type_) =
         List $ [Symbol "generic", lispify pos, lispify name, lispify type_]
     lispify (ConceptFuncId pos name conc) =
